@@ -2,9 +2,9 @@
   "framework": null,
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/", "destination": "/index.html" },
-    { "source": "/app", "destination": "/index.html" },
-    { "source": "/app/", "destination": "/index.html" }
+    { "source": "/", "destination": "/index-v2.html" },
+    { "source": "/app", "destination": "/index-v2.html" },
+    { "source": "/app/", "destination": "/index-v2.html" }
   ],
   "headers": [
     { "source": "/favicon.svg", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
