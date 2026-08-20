@@ -1,0 +1,9 @@
+{
+  "name": "QR Studio",
+  "short_name": "QR Studio",
+  "start_url": "/app/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6d50e7",
+  "icons": []
+}

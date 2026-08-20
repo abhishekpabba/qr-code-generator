@@ -1,0 +1,20 @@
+{
+  "name": "qr-code-generator",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SEO-ready customer QR code, dynamic QR and barcode generator",
+  "scripts": {
+    "postinstall": "tar -xzf source.tar.gz",
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "check": "node --check server.js"
+  },
+  "engines": { "node": ">=20" },
+  "dependencies": {
+    "@vercel/blob": "^1.1.1",
+    "express": "^4.21.2",
+    "multer": "^1.4.5-lts.2",
+    "pg": "^8.16.3"
+  }
+}
