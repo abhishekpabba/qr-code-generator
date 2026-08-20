@@ -1,5 +1,11 @@
 {
   "framework": null,
+  "outputDirectory": "public",
+  "rewrites": [
+    { "source": "/", "destination": "/app/index.html" },
+    { "source": "/app", "destination": "/app/index.html" },
+    { "source": "/app/", "destination": "/app/index.html" }
+  ],
   "headers": [
     {
       "source": "/site.css",
