@@ -1,0 +1,72 @@
+name: Fix QR icon and email attachments
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-icon-email.yml'
+permissions:
+  contents: write
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch QR rendering and email flow
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          import re
+
+          for filename in ['public/index.html','public/index-v4.html']:
+              p=Path(filename)
+              s=p.read_text()
+
+              # Generate the QR itself without asking qr-code-styling to render the center image.
+              s=re.sub(
+                  r"qr\.update\(\{width:s,height:s,data:payload\(\),image:logo\|\|undefined,dotsOptions:\{type:\$\('dotStyle'\)\.value,color:\$\('fg'\)\.value\},backgroundOptions:\{color:\$\('bg'\)\.value\},qrOptions:\{errorCorrectionLevel:logo\?'H':'Q'\},imageOptions:\{hideBackgroundDots:true,margin:5,imageSize:l\}\}\)",
+                  "qr.update({width:s,height:s,data:payload(),image:undefined,dotsOptions:{type:$('dotStyle').value,color:$('fg').value},backgroundOptions:{color:$('bg').value},qrOptions:{errorCorrectionLevel:logo?'H':'Q'}})",
+                  s
+              )
+
+              # Add a data-URL image loader beside the existing Blob loader.
+              old="function blobImg(blob){return new Promise((res,rej)=>{const u=URL.createObjectURL(blob),i=new Image();i.onload=()=>{URL.revokeObjectURL(u);res(i)};i.onerror=rej;i.src=u})}"
+              new=old+"function dataImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src})}"
+              if old in s and 'function dataImg(src)' not in s:
+                  s=s.replace(old,new)
+
+              # Draw the selected built-in icon or uploaded logo ourselves onto the final image.
+              old_draw="x.drawImage(img,pad,pad,s,s);x.restore();if(label){"
+              new_draw="x.drawImage(img,pad,pad,s,s);x.restore();if(logo){const li=await dataImg(logo),iw=Math.max(28,Math.round(s*(+$('logoSize').value/100))),cx=pad+s/2,cy=pad+s/2,bp=Math.max(6,Math.round(iw*.13)),bw=iw+bp*2,bx=cx-bw/2,by=cy-bw/2;x.fillStyle='#fff';x.beginPath();if(x.roundRect)x.roundRect(bx,by,bw,bw,Math.max(8,Math.round(bw*.18)));else x.rect(bx,by,bw,bw);x.fill();x.drawImage(li,cx-iw/2,cy-iw/2,iw,iw)}if(label){"
+              if old_draw not in s:
+                  raise SystemExit(f'draw marker missing in {filename}')
+              s=s.replace(old_draw,new_draw)
+
+              # Replace the download/email/share implementation with a shared selected-format file builder.
+              start=s.index("function save(blob,name)")
+              end=s.index("$('print').onclick", start)
+              replacement=r'''function save(blob,name){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200)}function pngBlob(c){return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('PNG failed')),'image/png'))}function canvasBlob(c,mime,quality=.95){return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('File creation failed')),mime,quality))}function pdfBlob(c){const{jsPDF}=window.jspdf,p=new jsPDF({orientation:c.width>c.height?'landscape':'portrait',unit:'px',format:[c.width,c.height]});p.addImage(c.toDataURL('image/png'),'PNG',0,0,c.width,c.height);return p.output('blob')}async function selectedFile(){const f=$('format').value,c=await canvas();if(f==='pdf')return new File([pdfBlob(c)],'qr-code.pdf',{type:'application/pdf'});if(f==='svg'){const png=c.toDataURL('image/png'),svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${c.width}" height="${c.height}" viewBox="0 0 ${c.width} ${c.height}"><image href="${png}" width="${c.width}" height="${c.height}"/></svg>`;return new File([svg],'qr-code.svg',{type:'image/svg+xml'})}if(f==='jpg')return new File([await canvasBlob(c,'image/jpeg',.95)],'qr-code.jpg',{type:'image/jpeg'});return new File([await pngBlob(c)],'qr-code.png',{type:'image/png'})}async function shareFile(file,text='My QR Code'){if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){await navigator.share({title:'My QR Code',text,files:[file]});return true}return false}async function download(){const b=$('download');b.disabled=true;try{const file=await selectedFile();save(file,file.name);$('status').className='status';$('status').textContent='Download started.'}catch(e){console.error(e);$('status').className='status error';$('status').textContent='Could not download. Please try again.'}finally{b.disabled=false}}$('download').onclick=download;$('emailCode').onclick=async()=>{const s=$('status');s.className='status';s.textContent='Preparing '+$('format').value.toUpperCase()+' attachment…';try{const file=await selectedFile();if(await shareFile(file,'QR code attached. Choose Mail to email it.'))s.textContent='Choose Mail to send the attached '+file.name.split('.').pop().toUpperCase()+' file.';else{location.href='mailto:?subject='+encodeURIComponent('My QR Code')+'&body='+encodeURIComponent('This browser cannot attach generated files directly. Please download the QR first, then attach it to your email.')}}catch(e){if(e?.name==='AbortError'){s.textContent='';return}console.error(e);s.className='status error';s.textContent='Could not prepare the email attachment.'}};$('share').onclick=async()=>{try{const file=await selectedFile();if(!await shareFile(file)){$('status').textContent='File sharing is not supported in this browser.'}}catch(e){if(e?.name!=='AbortError'){console.error(e);$('status').className='status error';$('status').textContent='Could not share the QR file.'}}};'''
+              s=s[:start]+replacement+s[end:]
+
+              p.write_text(s)
+          PY
+      - name: Validate JavaScript
+        run: |
+          python <<'PY'
+          import re
+          from pathlib import Path
+          for f in ['public/index.html','public/index-v4.html']:
+              s=Path(f).read_text()
+              scripts=re.findall(r'<script>(.*?)</script>',s,re.S)
+              out='/tmp/'+Path(f).stem+'.js'
+              Path(out).write_text(scripts[-1])
+          PY
+          node --check /tmp/index.js
+          node --check /tmp/index-v4.js
+      - name: Commit fixes
+        run: |
+          git config user.name "QR UI Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/index.html public/index-v4.html
+          git commit -m "Fix center icon rendering and selected-format email sharing"
+          git push
