@@ -1,4 +1,4 @@
-name: Publish tested QR UI
+name: Clean QR UI handlers
 on:
   push:
     paths:
@@ -6,28 +6,42 @@ on:
 permissions:
   contents: write
 jobs:
-  publish:
+  clean:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           ref: main
-      - name: Publish tested UI at root
-        run: cp public/index-v4.html public/index.html
+      - name: Clean duplicate handlers
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          for name in ['public/index-v4.html','public/index.html']:
+              p=Path(name)
+              s=p.read_text()
+              dup="document.querySelectorAll('.shape').forEach(b=>b.onclick=()=>{$('toggleTypes').onclick=()=>{const o=$('moreTypes').classList.toggle('open');$('toggleTypes').textContent=o?'− Fewer QR types':'＋ More QR types'};$('toggleIcons').onclick=()=>{const o=$('iconExtra').classList.toggle('open');$('toggleIcons').textContent=o?'Show less':'Show more'};document.querySelectorAll('.shape').forEach(x=>x.classList.remove('active'));b.classList.add('active');shape=b.dataset.shape;schedule()});"
+              clean="document.querySelectorAll('.shape').forEach(b=>b.onclick=()=>{document.querySelectorAll('.shape').forEach(x=>x.classList.remove('active'));b.classList.add('active');shape=b.dataset.shape;schedule()});"
+              if dup not in s:
+                  raise SystemExit(f'duplicate handler not found in {name}')
+              s=s.replace(dup,clean)
+              p.write_text(s)
+          PY
       - name: Validate JavaScript syntax
         run: |
           python <<'PY'
           import re
           from pathlib import Path
-          s=Path('public/index.html').read_text()
-          scripts=re.findall(r'<script>(.*?)</script>',s,re.S)
-          Path('/tmp/qr-app.js').write_text(scripts[-1])
+          for name in ['public/index-v4.html','public/index.html']:
+              s=Path(name).read_text()
+              scripts=re.findall(r'<script>(.*?)</script>',s,re.S)
+              Path('/tmp/'+Path(name).stem+'.js').write_text(scripts[-1])
           PY
-          node --check /tmp/qr-app.js
-      - name: Commit root page
+          node --check /tmp/index-v4.js
+          node --check /tmp/index.js
+      - name: Commit cleanup
         run: |
           git config user.name "QR UI Bot"
           git config user.email "actions@users.noreply.github.com"
-          git add public/index.html
-          git commit -m "Publish tested QR UI to production root"
+          git add public/index-v4.html public/index.html
+          git commit -m "Clean QR UI event handlers"
           git push
