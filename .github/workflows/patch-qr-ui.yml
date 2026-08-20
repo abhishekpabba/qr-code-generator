@@ -1,0 +1,67 @@
+name: Patch QR UI
+on:
+  push:
+    paths:
+      - '.github/workflows/patch-qr-ui.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Patch customer UI
+        run: |
+          python <<'PY'
+          from pathlib import Path
+          p=Path('public/index-v4.html')
+          s=p.read_text()
+
+          s=s.replace('.types{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:24px}', '.types{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}.more-types{display:none;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:9px}.more-types.open{display:grid}.more-btn{width:100%;margin:9px 0 15px;border:1px solid var(--line);background:#faf9ff;color:#5f4bd5;border-radius:12px;padding:10px;font-weight:750}')
+          s=s.replace('.icon-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px}', '.icon-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.icon-extra{display:none;grid-template-columns:repeat(4,1fr);gap:8px;margin-top:8px}.icon-extra.open{display:grid}')
+
+          old_types='<div class="types"><button class="type active" data-type="url">Website</button><button class="type" data-type="text">Text</button><button class="type" data-type="wifi">WiFi</button><button class="type" data-type="email">Email</button><button class="type" data-type="phone">Phone</button><button class="type" data-type="sms">SMS</button><button class="type" data-type="whatsapp">WhatsApp</button><button class="type" data-type="vcard">Contact</button></div><div id="fields"></div>'
+          new_types='<div class="types"><button class="type active" data-type="url">Website</button><button class="type" data-type="text">Text</button></div><div id="moreTypes" class="more-types"><button class="type" data-type="wifi">WiFi</button><button class="type" data-type="email">Email</button><button class="type" data-type="phone">Phone</button><button class="type" data-type="sms">SMS</button><button class="type" data-type="whatsapp">WhatsApp</button><button class="type" data-type="vcard">Contact</button></div><button id="toggleTypes" class="more-btn" type="button">＋ More QR types</button><div id="fields"></div>'
+          if old_types not in s: raise SystemExit('types block not found')
+          s=s.replace(old_types,new_types)
+
+          old_icons='<div class="icon-title"><span>Or choose a center icon</span><button id="clearIcon" type="button">Remove icon</button></div><div id="iconGrid" class="icon-grid"></div>'
+          new_icons='<div class="icon-title"><span>Center icon</span><button id="toggleIcons" type="button">Show more</button></div><div id="iconTop" class="icon-grid"></div><div id="iconExtra" class="icon-extra"></div><div style="text-align:right"><button id="clearIcon" type="button" style="border:0;background:transparent;color:#6b57db;font-size:12px;font-weight:700">Remove icon</button></div>'
+          if old_icons not in s: raise SystemExit('icon block not found')
+          s=s.replace(old_icons,new_icons)
+
+          start=s.index('function iconData(path)')
+          end=s.index("$('clearIcon').onclick", start)
+          replacement='''function iconData(path){const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 24 24"><rect width="24" height="24" rx="5" fill="#fff"/>${path.replaceAll('currentColor','#111')}</svg>`;return'data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(svg)))}const TOP_ICON_IDS=['instagram','facebook','web','tiktok'];function iconBtn(i){const[id,n,p]=i;return`<button class="icon-btn${id===activeIcon?' active':''}" data-id="${id}" type="button"><svg viewBox="0 0 24 24">${p}</svg><span>${n==='Web'?'Website':n}</span></button>`}function bindIconButtons(root){root.querySelectorAll('button').forEach(b=>b.onclick=()=>{const i=ICONS.find(x=>x[0]===b.dataset.id);activeIcon=i[0];logo=iconData(i[2]);$('logo').value='';$('logoLabel').textContent='＋ Upload image';renderIcons();schedule()})}function renderIcons(){const top=TOP_ICON_IDS.map(id=>ICONS.find(i=>i[0]===id)).filter(Boolean),rest=ICONS.filter(i=>!TOP_ICON_IDS.includes(i[0]));$('iconTop').innerHTML=top.map(iconBtn).join('');$('iconExtra').innerHTML=rest.map(iconBtn).join('');bindIconButtons($('iconTop'));bindIconButtons($('iconExtra'))}'''
+          s=s[:start]+replacement+s[end:]
+
+          s=s.replace("imageOptions:{margin:5,imageSize:l,crossOrigin:'anonymous'}", "imageOptions:{hideBackgroundDots:true,margin:5,imageSize:l}")
+          s=s.replace("async function canvas(){apply();const raw=await qr.getRawData('png')", "async function canvas(){apply();await new Promise(r=>setTimeout(r,80));const raw=await qr.getRawData('png')")
+
+          marker="document.querySelectorAll('.shape').forEach"
+          insert="$('toggleTypes').onclick=()=>{const o=$('moreTypes').classList.toggle('open');$('toggleTypes').textContent=o?'− Fewer QR types':'＋ More QR types'};$('toggleIcons').onclick=()=>{const o=$('iconExtra').classList.toggle('open');$('toggleIcons').textContent=o?'Show less':'Show more'};"
+          if insert not in s:
+              s=s.replace(marker,insert+marker)
+
+          s=s.replace("<p class=\"sub\">Choose a type, enter your content, then customize the design.</p>", "<p class=\"sub\">Start with the most-used options. Open More only when you need it.</p>")
+          p.write_text(s)
+          PY
+      - name: Validate JavaScript syntax
+        run: |
+          python <<'PY'
+          import re
+          from pathlib import Path
+          s=Path('public/index-v4.html').read_text()
+          scripts=re.findall(r'<script>(.*?)</script>',s,re.S)
+          Path('/tmp/qr-app.js').write_text(scripts[-1])
+          PY
+          node --check /tmp/qr-app.js
+      - name: Commit repair
+        run: |
+          git config user.name "QR UI Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/index-v4.html
+          git commit -m "Fix center icons and simplify QR options"
+          git push
