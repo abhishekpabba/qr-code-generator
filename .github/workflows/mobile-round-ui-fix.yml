@@ -1,0 +1,37 @@
+name: Mobile and round QR fix
+on:
+  push:
+    paths:
+      - '.github/workflows/mobile-round-ui-fix.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch production QR page
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html')
+          s=p.read_text()
+          s=s.replace('<div class="tip">On iPhone or iPad: press and hold the QR image to save or share it.</div>','')
+          s=s.replace('<div class="note">Email QR opens your device share sheet with the PNG attached. Choose Mail to send it.</div>','')
+          # Make the selected round QR visually circular as a whole, not merely rounded modules.
+          old="canvas.toBlob(async blob=>{if(!blob)return;const u=URL.createObjectURL(blob);if(lastPreviewUrl)URL.revokeObjectURL(lastPreviewUrl);lastPreviewUrl=u;qrImage.src=u;"
+          new="if(shape==='round'){ctx.save();ctx.globalCompositeOperation='destination-in';ctx.beginPath();ctx.arc(canvas.width/2,canvas.height/2,Math.min(canvas.width,canvas.height)/2,0,Math.PI*2);ctx.fill();ctx.restore()}canvas.toBlob(async blob=>{if(!blob)return;const u=URL.createObjectURL(blob);if(lastPreviewUrl)URL.revokeObjectURL(lastPreviewUrl);lastPreviewUrl=u;qrImage.src=u;"
+          if old in s: s=s.replace(old,new)
+          # Compact mobile layout: less hero/workspace/card/section/stage whitespace.
+          marker='@media(max-width:600px){'
+          compact='@media(max-width:600px){.hero{padding:24px 0 8px}.hero h1{margin:12px auto 8px}.hero p{line-height:1.4}.workspace{margin:14px auto 30px;gap:14px}.panel,.preview{padding:14px}.sub{margin-bottom:14px}.section{margin-top:14px;padding-top:14px}.field{margin-bottom:11px}.qrstage{min-height:300px;padding:12px}.formats{margin-top:12px}.utility{margin-top:10px}.features{gap:10px;margin-bottom:35px}.controls,.grid2,.features{grid-template-columns:1fr}.nav{height:62px}.brand{font-size:18px}.utility .btn{flex:1}.shell{width:min(100% - 16px,1180px)}}@media(max-width:600px){'
+          s=s.replace(marker,compact,1)
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR UI Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Make round QR circular and compact mobile UI' || exit 0
+          git push
