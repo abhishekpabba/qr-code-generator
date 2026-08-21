@@ -1,0 +1,35 @@
+name: Fix client freeze
+on:
+  push:
+    paths: ['.github/workflows/fix-client-freeze.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Remove mutation loop and restore live refresh
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html'); s=p.read_text()
+          # Repair centralized live controller: use existing schedule() and remove self-triggering MutationObserver loop.
+          s=s.replace("const refresh=()=>{try{if(typeof update==='function')update();}catch(e){console.error('QR update failed',e)}};","const refresh=()=>{try{if(typeof schedule==='function')schedule();else if(typeof preview==='function')preview();}catch(e){console.error('QR update failed',e)}};")
+          s=s.replace("const grad=byId('gradientType')?.selectedOptions?.[0]?.textContent?.trim();","const grad=byId('gradientMode')?.selectedOptions?.[0]?.textContent?.trim();")
+          old="""    const observer=new MutationObserver(()=>{delayed();advancedSummary()});
+    const panel=document.querySelector('.panel');if(panel)observer.observe(panel,{childList:true,subtree:true});
+    updateQuality();advancedSummary();delayed();"""
+          new="""    updateQuality();advancedSummary();delayed();"""
+          s=s.replace(old,new)
+          # Ensure advanced button visually shows expanded state.
+          s=s.replace("$('toggleAdvanced')?.addEventListener('click',()=>{$('advancedDesign').classList.toggle('open')});","$('toggleAdvanced')?.addEventListener('click',()=>{const o=$('advancedDesign').classList.toggle('open');$('toggleAdvanced').classList.toggle('active',o)});")
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR Repair Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Fix browser freeze from live update observer' || exit 0
+          git push
