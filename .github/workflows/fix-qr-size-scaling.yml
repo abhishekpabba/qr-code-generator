@@ -1,0 +1,47 @@
+name: Fix QR size scaling and preview zoom
+on:
+  push:
+    paths: ['.github/workflows/fix-qr-size-scaling.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fix high-resolution QR canvas scaling and preview sizing
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p=Path('public/index.html')
+          s=p.read_text()
+
+          # The live preview is an IMG, not #qrStable/#qrLive SVG. Remove the old ineffective override.
+          s=re.sub(r'<style id="qr-preview-fit-fix">.*?</style>', '', s, flags=re.S)
+
+          # When a high-resolution QR image is composited onto a canvas, always scale it to
+          # the destination canvas. A 3-argument drawImage draws at natural size and crops
+          # 1024/2048/4096px QR images when the destination canvas is smaller.
+          s=s.replace("x.drawImage(img,0,0);", "x.drawImage(img,0,0,c.width,c.height);")
+          s=s.replace("ctx.drawImage(img,0,0);", "ctx.drawImage(img,0,0,canvas.width,canvas.height);")
+          s=s.replace("ctx.drawImage(qrImg,0,0);", "ctx.drawImage(qrImg,0,0,canvas.width,canvas.height);")
+          s=s.replace("ctx.drawImage(svgImg,0,0);", "ctx.drawImage(svgImg,0,0,canvas.width,canvas.height);")
+
+          # Keep the complete generated QR visible in the card at every selected resolution.
+          css='''<style id="qr-preview-size-fix">
+          .qrstage{overflow:hidden!important;min-width:0!important}
+          #qrImage{display:block!important;width:auto!important;height:auto!important;max-width:100%!important;max-height:340px!important;object-fit:contain!important;margin:auto!important}
+          @media(max-width:600px){#qrImage{max-width:100%!important;max-height:280px!important}.qrstage{padding:14px!important}}
+          </style>'''
+          if 'id="qr-preview-size-fix"' not in s:
+              s=s.replace('</head>',css+'</head>',1)
+          p.write_text(s)
+      - name: Commit fix
+        run: |
+          git config user.name 'QR Size Fix Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Fix QR preview zoom and high-resolution canvas scaling' || exit 0
+          git push
