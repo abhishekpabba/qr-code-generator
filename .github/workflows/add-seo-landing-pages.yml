@@ -1,0 +1,57 @@
+name: Add QR SEO landing pages
+on:
+  push:
+    paths: ['.github/workflows/add-seo-landing-pages.yml']
+permissions:
+  contents: write
+jobs:
+  build-pages:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate landing pages and sitemap
+        shell: python
+        run: |
+          from pathlib import Path
+          base='https://qr-code-generator-beta-eight.vercel.app'
+          pages={
+            'text-qr-code-generator':('Text QR Code Generator','text','Create a free text QR code online. Turn plain text, instructions, messages, serial numbers and other content into a scannable QR code.','Create a Text QR Code','Text QR codes store the text directly inside the code, so a scan can reveal the message without requiring a website. They are useful for instructions, product information, event notes, Wi-Fi backup instructions, serial numbers and short messages.'),
+            'whatsapp-qr-code-generator':('WhatsApp QR Code Generator','whatsapp','Create a free WhatsApp QR code for a phone number and optional pre-filled message. No signup required.','Create a WhatsApp QR Code','A WhatsApp QR code can open a conversation with your business or personal number and can include a ready-to-send message. It is useful on business cards, flyers, packaging, menus, storefront signs and customer support materials.'),
+            'instagram-qr-code-generator':('Instagram QR Code Generator','instagram','Create a free Instagram QR code for your profile. Customize colors, logo and style, then download PNG, SVG or PDF.','Create an Instagram QR Code','Turn your Instagram profile into a QR code customers can scan from printed cards, packaging, signs, menus or event displays. Add an Instagram center icon or your own logo and export a print-ready file.'),
+            'email-qr-code-generator':('Email QR Code Generator','email','Create a free email QR code with recipient, subject and message. Customize and download instantly.','Create an Email QR Code','An email QR code opens a new email with fields such as the recipient, subject and message already filled in. This reduces typing and is useful for customer support, quote requests, feedback forms and event inquiries.'),
+            'phone-qr-code-generator':('Phone QR Code Generator','phone','Create a free phone number QR code that lets customers tap to call after scanning.','Create a Phone QR Code','Phone QR codes make it easy for customers to call without typing your number. They work well on service vehicles, business cards, appointment cards, storefront signs and printed advertisements.'),
+            'sms-qr-code-generator':('SMS QR Code Generator','sms','Create a free SMS QR code with a phone number and optional pre-filled text message.','Create an SMS QR Code','An SMS QR code opens the phone messaging app with a recipient and optional message already prepared. It is useful for appointment requests, event responses, customer support and promotions.'),
+            'youtube-qr-code-generator':('YouTube QR Code Generator','youtube','Create a free YouTube QR code for a channel or video. Customize it and download high-resolution files.','Create a YouTube QR Code','Send people directly to a YouTube channel, video or playlist from printed material. You can add a YouTube icon, change colors and export the final QR code for digital use or professional printing.'),
+            'paypal-qr-code-generator':('PayPal QR Code Generator','paypal','Create a free QR code for your PayPal.me payment link. Customize and download it for signs, invoices and events.','Create a PayPal QR Code','A PayPal QR code can send customers to your PayPal payment link without making them type the address. Always verify the destination and payment details before printing or sharing the code.'),
+            'venmo-qr-code-generator':('Venmo QR Code Generator','venmo','Create a free Venmo QR code from your Venmo profile or payment link.','Create a Venmo QR Code','A Venmo QR code gives customers a fast way to open your Venmo profile or payment link from a printed sign, invoice, event display or card. Verify your username and destination before distributing it.'),
+            'upi-qr-code-generator':('UPI QR Code Generator','upi','Create a free QR code from a UPI payment link or UPI ID for compatible payment apps.','Create a UPI QR Code','UPI QR codes can open supported payment apps using a UPI payment URI. Confirm the payee details and amount before using a payment QR in production.'),
+            'bitcoin-qr-code-generator':('Bitcoin QR Code Generator','bitcoin','Create a free Bitcoin QR code from a Bitcoin address or bitcoin: payment URI.','Create a Bitcoin QR Code','Bitcoin QR codes help reduce errors when sharing long wallet addresses. Always confirm the wallet address and payment details before accepting or sending cryptocurrency.'),
+            'png-qr-code-generator':('PNG QR Code Generator','url','Create and download a free high-resolution PNG QR code with custom colors, logo and shapes.','Free PNG QR Code Generator','PNG is a convenient format for websites, social media, presentations and everyday digital use. Choose a higher resolution when the QR code will be displayed or printed at a larger size.'),
+            'pdf-qr-code-generator':('PDF QR Code Generator','url','Create a free QR code and download it as a PDF for sharp, print-ready output.','Free PDF QR Code Generator','PDF is useful when you need a QR code in a print workflow, especially for cards, menus, signs, packaging and marketing materials. Test the final printed QR code before producing large quantities.')
+          }
+          css='''body{margin:0;font-family:Inter,system-ui,-apple-system,"Segoe UI",sans-serif;color:#18181b;background:linear-gradient(180deg,#fff,#f8f8fc)}*{box-sizing:border-box}.nav{height:62px;border-bottom:1px solid #e5e5eb;display:flex;align-items:center;padding:0 max(18px,calc((100vw - 980px)/2));font-weight:850}.mark{background:linear-gradient(145deg,#6c5ce7,#4f7cff);color:#fff;border-radius:10px;padding:7px;margin-right:9px}.wrap{width:min(900px,calc(100% - 32px));margin:0 auto}.hero{text-align:center;padding:64px 0 32px}.hero h1{font-size:clamp(38px,6vw,60px);letter-spacing:-.05em;line-height:1;margin:0 0 16px}.hero p{color:#696970;font-size:18px;line-height:1.6;max-width:720px;margin:0 auto 24px}.btn{display:inline-block;background:#18181b;color:#fff;padding:14px 20px;border-radius:12px;text-decoration:none;font-weight:800}.card{background:#fff;border:1px solid #e5e5eb;border-radius:20px;padding:24px;margin:18px 0}.card h2{margin-top:0}.card p,.card li{color:#5f5f67;line-height:1.7}.links{display:flex;gap:10px;flex-wrap:wrap}.links a{color:#5f4bd5;text-decoration:none;font-weight:700}.footer{border-top:1px solid #e5e5eb;margin-top:44px;padding:26px 0;color:#696970;font-size:13px}@media(max-width:600px){.hero{padding:38px 0 20px}.hero p{font-size:16px}.card{padding:18px}.nav{height:58px}}'''
+          template='''<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>{title} | Free, No Signup</title><meta name="description" content="{desc}"><meta name="robots" content="index,follow,max-image-preview:large"><link rel="canonical" href="{canonical}"><meta property="og:type" content="website"><meta property="og:title" content="{title}"><meta property="og:description" content="{desc}"><meta property="og:url" content="{canonical}"><meta property="og:image" content="{base}/og.png"><style>{css}</style><script type="application/ld+json">{schema}</script></head><body><header class="nav"><span class="mark">QR</span> QR Code Generator</header><main class="wrap"><section class="hero"><h1>{h1}</h1><p>{intro}</p><a class="btn" href="/?type={qtype}">Create this QR code</a></section><section class="card"><h2>How it works</h2><ol><li>Open the generator with this QR type selected.</li><li>Enter the information you want the QR code to contain.</li><li>Customize colors, shape, center logo or icon and size.</li><li>Test the QR code, then download PNG, JPG, SVG or PDF.</li></ol></section><section class="card"><h2>Why use this QR type?</h2><p>{intro}</p><p>The generator is free to use for static QR codes, requires no signup, and lets you customize the design before downloading. For printing, SVG or PDF is usually the best choice because it stays sharp when scaled. For websites and social media, PNG is convenient.</p></section><section class="card"><h2>Frequently asked questions</h2><h3>Is it free?</h3><p>Yes. You can create and download static QR codes without creating an account.</p><h3>Do static QR codes expire?</h3><p>No. A static QR code continues to work as long as the information encoded in it remains valid.</p><h3>Can I use it commercially?</h3><p>Yes. You can use generated QR codes on business cards, menus, packaging, signs, labels and marketing materials. Make sure you have permission to use any logos or content you add.</p></section><section class="card"><h2>More QR tools</h2><div class="links"><a href="/wifi-qr-code-generator/">WiFi QR</a><a href="/vcard-qr-code-generator/">vCard QR</a><a href="/whatsapp-qr-code-generator/">WhatsApp QR</a><a href="/instagram-qr-code-generator/">Instagram QR</a><a href="/svg-qr-code-generator/">SVG QR</a><a href="/">All QR types</a></div></section></main><footer class="footer"><div class="wrap">© 2026 QR Code Generator · <a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a></div></footer></body></html>'''
+          import json
+          urls=['/','/wifi-qr-code-generator/','/vcard-qr-code-generator/','/svg-qr-code-generator/']
+          for slug,(title,qtype,desc,h1,intro) in pages.items():
+              canonical=f'{base}/{slug}/'
+              schema=json.dumps({'@context':'https://schema.org','@type':'WebApplication','name':title,'url':canonical,'applicationCategory':'UtilityApplication','operatingSystem':'All','offers':{'@type':'Offer','price':'0','priceCurrency':'USD'}})
+              html=template.format(title=title,desc=desc,canonical=canonical,base=base,css=css,schema=schema,h1=h1,intro=intro,qtype=qtype)
+              d=Path('public')/slug; d.mkdir(parents=True,exist_ok=True); (d/'index.html').write_text(html)
+              urls.append(f'/{slug}/')
+          # Add all indexable pages to sitemap.
+          sitemap=['<?xml version="1.0" encoding="UTF-8"?>','<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">']
+          for i,u in enumerate(urls):
+              priority='1.0' if u=='/' else '0.8'
+              freq='weekly' if u=='/' else 'monthly'
+              sitemap.append(f'  <url><loc>{base}{u}</loc><changefreq>{freq}</changefreq><priority>{priority}</priority></url>')
+          sitemap.append('</urlset>')
+          Path('public/sitemap.xml').write_text('\n'.join(sitemap)+'\n')
+      - name: Commit generated SEO pages
+        run: |
+          git config user.name 'QR SEO Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public
+          git commit -m 'Add dedicated QR type SEO landing pages' || exit 0
+          git push
