@@ -1,0 +1,52 @@
+name: Add dynamic QR UI
+on:
+  push:
+    paths: ['.github/workflows/add-dynamic-ui.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch dynamic QR UI
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html'); s=p.read_text()
+          css='''<style>
+          .dynamic-card{border:1px solid #ddd7ff;background:#faf9ff;border-radius:14px;padding:14px;margin:12px 0 16px}.dynamic-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.switch{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:800}.dynamic-body{display:none;margin-top:12px}.dynamic-body.open{display:block}.dynamic-info{margin-top:10px;padding:10px;border-radius:10px;background:#eef8f2;color:#256c49;font-size:12px;line-height:1.5}.dynamic-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.dynamic-actions .btn{padding:9px 11px;font-size:12px}.analytics-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.metric{border:1px solid var(--line);background:#fff;border-radius:10px;padding:9px}.metric b{display:block;font-size:17px}.metric span{font-size:10px;color:var(--muted)}@media(max-width:600px){.analytics-grid{grid-template-columns:1fr 1fr}.dynamic-card{padding:11px}}
+          </style>'''
+          s=s.replace('</head>',css+'</head>',1)
+          anchor='<div id="fields"></div>'
+          dynamic='''<div id="fields"></div><div id="dynamicCard" class="dynamic-card"><div class="dynamic-head"><div><b>Dynamic / trackable QR</b><div class="sub" style="margin:3px 0 0">Edit the destination later and see scan counts.</div></div><label class="switch"><input id="dynamicToggle" type="checkbox"> Enable</label></div><div id="dynamicBody" class="dynamic-body"><div class="grid2"><div class="field"><label>QR name</label><input id="dynamicName" class="input" value="My Dynamic QR"></div><div class="field"><label>Destination</label><input id="dynamicDestination" class="input" placeholder="https://example.com"></div></div><div class="dynamic-actions"><button id="createDynamic" class="btn primary" type="button">Create dynamic QR</button><button id="updateDynamic" class="btn" type="button" hidden>Update destination</button><button id="refreshAnalytics" class="btn" type="button" hidden>Refresh analytics</button><button id="disableDynamic" class="btn" type="button" hidden>Return to static</button></div><div id="dynamicInfo"></div><div id="dynamicAnalytics" class="analytics-grid" hidden></div></div></div>'''
+          if anchor in s:s=s.replace(anchor,dynamic,1)
+          # When a dynamic code exists, encode the redirect URL rather than the final destination.
+          s=s.replace('function data(){','function data(){if(window.__dynamicRedirect)return location.origin+window.__dynamicRedirect;',1)
+          js=r'''<script>
+          (()=>{
+            const $=id=>document.getElementById(id);
+            let dynamicCode=null;
+            const ownerKey='qrDynamicOwner';
+            let owner=localStorage.getItem(ownerKey);if(!owner){owner=(crypto.randomUUID?crypto.randomUUID():Date.now()+'-'+Math.random());localStorage.setItem(ownerKey,owner)}
+            const headers={'Content-Type':'application/json','X-QR-Owner':owner};
+            const destination=()=>{let u=$('url')?.value?.trim()||$('dynamicDestination')?.value?.trim()||'';if(u&&!/^https?:\/\//i.test(u))u='https://'+u;return u};
+            const showStatic=()=>{dynamicCode=null;window.__dynamicRedirect='';$('dynamicToggle').checked=false;$('dynamicBody').classList.remove('open');$('updateDynamic').hidden=true;$('refreshAnalytics').hidden=true;$('disableDynamic').hidden=true;$('createDynamic').hidden=false;$('dynamicInfo').innerHTML='';$('dynamicAnalytics').hidden=true;update()};
+            $('dynamicToggle')?.addEventListener('change',e=>{if(type!=='url'&&e.target.checked){e.target.checked=false;alert('Dynamic QR is currently available for Website links.');return}$('dynamicBody').classList.toggle('open',e.target.checked);if(e.target.checked)$('dynamicDestination').value=destination()});
+            $('createDynamic')?.addEventListener('click',async()=>{try{const dest=$('dynamicDestination').value.trim()||destination();const r=await fetch('/api/dynamic',{method:'POST',headers,body:JSON.stringify({name:$('dynamicName').value,payload:dest})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Could not create dynamic QR');dynamicCode=j;window.__dynamicRedirect=j.shortUrl;$('createDynamic').hidden=true;$('updateDynamic').hidden=false;$('refreshAnalytics').hidden=false;$('disableDynamic').hidden=false;$('dynamicInfo').className='dynamic-info';$('dynamicInfo').innerHTML=`Dynamic QR created.<br><b>${location.origin+j.shortUrl}</b><br>You can change the destination later without reprinting the QR.`;update();await refreshStats()}catch(e){$('dynamicInfo').className='status error';$('dynamicInfo').textContent=e.message}});
+            $('updateDynamic')?.addEventListener('click',async()=>{if(!dynamicCode)return;try{const r=await fetch('/api/dynamic?id='+encodeURIComponent(dynamicCode.id),{method:'PATCH',headers,body:JSON.stringify({name:$('dynamicName').value,payload:$('dynamicDestination').value})});const j=await r.json();if(!r.ok)throw new Error(j.error||'Could not update destination');dynamicCode=j;$('dynamicInfo').className='dynamic-info';$('dynamicInfo').innerHTML=`Destination updated. Your printed QR still uses <b>${location.origin+j.shortUrl}</b>.`;await refreshStats()}catch(e){$('dynamicInfo').className='status error';$('dynamicInfo').textContent=e.message}});
+            async function refreshStats(){if(!dynamicCode)return;try{const r=await fetch('/api/dynamic?id='+encodeURIComponent(dynamicCode.id),{headers:{'X-QR-Owner':owner}});const j=await r.json();if(!r.ok)throw new Error(j.error||'Analytics unavailable');const a=j.analytics||{};$('dynamicAnalytics').hidden=false;$('dynamicAnalytics').innerHTML=`<div class="metric"><b>${a.scans||0}</b><span>Total scans</span></div><div class="metric"><b>${a.active_days||0}</b><span>Active days</span></div><div class="metric"><b>${a.last_scan?new Date(a.last_scan).toLocaleDateString():'—'}</b><span>Last scan</span></div>`}catch(e){$('dynamicAnalytics').hidden=false;$('dynamicAnalytics').innerHTML=`<div class="status error">${e.message}</div>`}}
+            $('refreshAnalytics')?.addEventListener('click',refreshStats);$('disableDynamic')?.addEventListener('click',showStatic);
+            document.addEventListener('click',e=>{const b=e.target.closest('.type');if(!b)return;if(b.dataset.type!=='url'&&dynamicCode)showStatic();$('dynamicCard').style.display=b.dataset.type==='url'?'block':'none'});
+          })();
+          </script>'''
+          s=s.replace('</body>',js+'</body>',1)
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR Dynamic Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Add free dynamic QR creation editing and analytics UI' || exit 0
+          git push
