@@ -1,0 +1,38 @@
+name: Add SEO meta keywords
+on:
+  push:
+    paths: ['.github/workflows/add-seo-meta-keywords.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch SEO tags
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html')
+          s=p.read_text()
+          old='<title>Free QR Code Generator – Create QR Codes Online</title><meta name="description" content="Create free QR codes with logos, social icons, shapes and sizes. Download, share, email or print your QR code."><meta name="robots" content="index,follow,max-image-preview:large">'
+          new='''<title>Free QR Code Generator | Custom QR Codes, WiFi, vCard, Text & More</title><meta name="description" content="Create free custom QR codes online for websites, text, WiFi, email, phone, SMS, WhatsApp, vCard, social media and payments. Customize colors, logos, shapes and download PNG, JPG, SVG or PDF."><meta name="keywords" content="free qr code generator, qr code generator, custom qr code generator, online qr code generator, qr code maker, create qr code, free qr code maker, website qr code, url qr code, text qr code, wifi qr code, email qr code, phone qr code, sms qr code, whatsapp qr code, vcard qr code, contact qr code, instagram qr code, tiktok qr code, youtube qr code, paypal qr code, venmo qr code, upi qr code, bitcoin qr code, social media qr code, qr code with logo, qr code with colors, colored qr code, custom qr design, qr code shapes, round qr code, square qr code, qr code png, qr code jpg, qr code svg, qr code pdf, printable qr code, high resolution qr code, dynamic qr code, trackable qr code, qr code scanner friendly, qr code for business, qr code for marketing, qr code for menu, qr code for business card, qr code for flyer, qr code for packaging, qr code for social media, generate qr code online, free qr generator no signup"><meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1">'''
+          if old in s:
+            s=s.replace(old,new,1)
+          else:
+            if 'name="keywords"' not in s:
+              s=s.replace('</title>','</title><meta name="keywords" content="free qr code generator, qr code generator, custom qr code generator, qr code maker, create qr code, wifi qr code, vcard qr code, text qr code, social media qr code, qr code with logo, qr code png, qr code svg, qr code pdf">',1)
+          # improve social/search snippet titles too
+          s=s.replace('<meta property="og:title" content="Free QR Code Generator | Custom Designs, Logos & High-Res Export">','<meta property="og:title" content="Free QR Code Generator | Custom QR Codes, WiFi, vCard, Text & More">')
+          s=s.replace('<meta property="og:description" content="Create custom QR codes with logos, gradients, frames, PNG, JPG, SVG and PDF downloads. Free with no signup required.">','<meta property="og:description" content="Create free custom QR codes for websites, text, WiFi, email, contacts, social media and payments. Customize colors, logos and shapes, then download PNG, JPG, SVG or PDF.">')
+          s=s.replace('<meta name="twitter:title" content="Free QR Code Generator">','<meta name="twitter:title" content="Free QR Code Generator | Custom QR Codes Online">')
+          s=s.replace('<meta name="twitter:description" content="Free custom QR codes with logos, gradients, frames and high-resolution exports.">','<meta name="twitter:description" content="Generate custom QR codes for URLs, text, WiFi, vCard, social media and more. Free with no signup required.">')
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'SEO Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Improve SEO meta tags and keywords' || exit 0
+          git push
