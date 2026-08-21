@@ -33,4 +33,14 @@
   // Client-side bulk: each CSV row becomes a QR PNG link; no upload/storage required.
   $('bulkFile')?.addEventListener('change',async e=>{const file=e.target.files[0];if(!file)return;const rows=(await file.text()).split(/\r?\n/).map(x=>x.split(',')[0].trim()).filter(Boolean).slice(0,100);const out=$('bulkResults');out.innerHTML='Generating…';const items=[];for(let i=0;i<rows.length;i++){const host=document.createElement('div');host.style.cssText='position:fixed;left:-9999px';document.body.appendChild(host);const q=new QRCodeStyling({width:500,height:500,type:'canvas',data:rows[i],margin:18,qrOptions:{errorCorrectionLevel:'Q'}});q.append(host);await new Promise(r=>setTimeout(r,45));const c=host.querySelector('canvas');if(c)items.push(`<div class="history-item"><span>${i+1}. ${rows[i].slice(0,35)}</span><a download="qr-${i+1}.png" href="${c.toDataURL('image/png')}">PNG</a></div>`);host.remove()}out.innerHTML=items.join('')||'No valid rows found.'});
 })();
+</script><script>
+window.addEventListener('DOMContentLoaded',()=>{
+  const requested=new URLSearchParams(location.search).get('type');
+  if(!requested)return;
+  const btn=document.querySelector(`.type[data-type="${CSS.escape(requested)}"]`);
+  if(!btn)return;
+  const more=document.getElementById('moreTypes');
+  if(more?.contains(btn) && !more.classList.contains('open')) document.getElementById('toggleTypes')?.click();
+  setTimeout(()=>{btn.click();document.querySelector('.workspace')?.scrollIntoView({behavior:'smooth',block:'start'});},80);
+});
 </script></body></html>
