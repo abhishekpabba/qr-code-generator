@@ -1,0 +1,57 @@
+name: Complete SEO and social metadata
+on:
+  push:
+    paths: ['.github/workflows/seo-and-social-metadata.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Improve metadata and structured data
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p=Path('public/index.html')
+          s=p.read_text()
+          title='Free QR Code Generator – Custom Logos, Colors & Shapes (No Sign-Up)'
+          desc='Free QR code generator for websites, WiFi, vCard, WhatsApp, email and more. Add logos, colors and shapes. Download PNG, SVG or PDF. No signup.'
+          s=re.sub(r'<title>.*?</title>', f'<title>{title}</title>', s, count=1)
+          s=re.sub(r'<meta name="description" content="[^"]*">', f'<meta name="description" content="{desc}">', s, count=1)
+          # Explicit favicon / PWA metadata
+          extras='''<link rel="icon" type="image/svg+xml" href="/favicon.svg"><link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png"><link rel="manifest" href="/site.webmanifest"><meta name="theme-color" content="#6755e7">'''
+          if 'rel="manifest"' not in s:
+              s=s.replace('</title>', '</title>'+extras, 1)
+          # Refresh Open Graph/Twitter copy and point to a real 1200x630 image.
+          replacements={
+            'og:title':title,
+            'og:description':'Create custom QR codes with logos, colors and shapes. Generate Website, WiFi, vCard, WhatsApp and more. Free, no signup.',
+            'og:image':'https://qr-code-generator-beta-eight.vercel.app/og-image.png',
+            'twitter:title':title,
+            'twitter:description':'Free custom QR code generator with logos, colors, shapes and PNG, SVG or PDF downloads. No signup.',
+            'twitter:image':'https://qr-code-generator-beta-eight.vercel.app/og-image.png'
+          }
+          for key,val in replacements.items():
+              attr='property' if key.startswith('og:') else 'name'
+              pat=rf'<meta {attr}="{re.escape(key)}" content="[^"]*">'
+              tag=f'<meta {attr}="{key}" content="{val}">'
+              if re.search(pat,s): s=re.sub(pat,tag,s,count=1)
+              else: s=s.replace('</head>',tag+'</head>',1)
+          if 'og:image:width' not in s:
+              s=s.replace('</head>','<meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="Free QR Code Generator interface"><meta name="twitter:image:alt" content="Free QR Code Generator interface"></head>',1)
+          # Replace application schema with richer WebApplication schema while keeping FAQ schema.
+          schema='''<script type="application/ld+json">{"@context":"https://schema.org","@type":"WebApplication","name":"Free QR Code Generator","url":"https://qr-code-generator-beta-eight.vercel.app/","description":"Free online QR code generator for websites, text, WiFi, vCard, WhatsApp, email, social media and payments. Customize logos, colors, shapes and export PNG, JPG, SVG or PDF.","applicationCategory":"UtilityApplication","operatingSystem":"Any","browserRequirements":"Requires a modern web browser with JavaScript enabled","isAccessibleForFree":true,"offers":{"@type":"Offer","price":"0","priceCurrency":"USD"},"featureList":["Website QR codes","WiFi QR codes","vCard QR codes","WhatsApp QR codes","Custom logos and center icons","Custom colors and QR shapes","PNG JPG SVG and PDF export","Dynamic and trackable QR codes"]}</script>'''
+          s=re.sub(r'<script type="application/ld\+json">\s*\{[^<]*"@type":"SoftwareApplication"[^<]*\}\s*</script>',schema,s,count=1)
+          # Make the visible first-page content state the keyword naturally without changing the minimalist layout.
+          s=s.replace('<p>Create, customize and download in seconds.</p>','<p>Free online QR code generator to create, customize and download professional QR codes in seconds — no signup required.</p>',1)
+          p.write_text(s)
+      - name: Commit metadata
+        run: |
+          git config user.name 'SEO Metadata Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Improve SEO metadata schema favicons and social cards' || exit 0
+          git push
