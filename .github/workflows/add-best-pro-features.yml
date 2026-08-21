@@ -1,0 +1,56 @@
+name: Add best QR Pro improvements
+on:
+  push:
+    paths: ['.github/workflows/add-best-pro-features.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add exact colors corner styles presets and guidance
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html'); s=p.read_text()
+          # Exact HEX inputs next to existing color controls, kept compact.
+          s=s.replace("<span>QR color</span>","<span>QR color</span><input id='fgHex' aria-label='QR color hex value' maxlength='7' value='#111111' style='width:76px;border:0;background:transparent;font-size:11px'>",1)
+          s=s.replace("<span>Background</span>","<span>Background</span><input id='bgHex' aria-label='Background color hex value' maxlength='7' value='#ffffff' style='width:76px;border:0;background:transparent;font-size:11px'>",1)
+          # Add advanced eye/corner styling and useful print guidance before bulk controls.
+          anchor='<button class="minimal-toggle" id="toggleBulk" type="button">Bulk QR generator</button>'
+          extra="""<div class='field'><label for='cornerStyle'>Corner / eye style</label><select class='input' id='cornerStyle'><option value='auto'>Match QR style</option><option value='square'>Square</option><option value='rounded'>Rounded</option><option value='dot'>Round</option><option value='extra-rounded'>Extra rounded</option></select></div><div class='note'>Print tip: SVG or PDF stays sharp at any size. For reliable scanning, print at least about 1 × 1 in (2.5 × 2.5 cm) and test the final printed size.</div>"""
+          if anchor in s: s=s.replace(anchor,extra+anchor,1)
+          # Expand presets without increasing default-page height (they remain under Advanced).
+          s=s.replace("data-preset=\"playful\">Playful", "data-preset=\"playful\">Playful",1)
+          preset_anchor='</div><div class="field"><label>Gradient</label>'
+          if preset_anchor in s:
+            s=s.replace(preset_anchor,"<button class='preset' data-preset='shadow'>Shadow</button><button class='preset' data-preset='polaroid'>Polaroid</button><button class='preset' data-preset='scanme'>Scan Me</button></div><div class=\"field\"><label>Gradient</label>",1)
+          # Wire exact hex values and eye styles after main script has initialized.
+          hook="""<script>
+          (()=>{const $x=id=>document.getElementById(id);const valid=v=>/^#[0-9a-f]{6}$/i.test(v);
+          window.addEventListener('DOMContentLoaded',()=>{
+            const f=$x('fgHex'),b=$x('bgHex'),fc=$x('fg'),bc=$x('bg');
+            if(f&&fc){fc.addEventListener('input',()=>f.value=fc.value);f.addEventListener('change',()=>{if(valid(f.value)){fc.value=f.value;fc.dispatchEvent(new Event('input',{bubbles:true}))}})}
+            if(b&&bc){bc.addEventListener('input',()=>b.value=bc.value);b.addEventListener('change',()=>{if(valid(b.value)){bc.value=b.value;bc.dispatchEvent(new Event('input',{bubbles:true}))}})}
+            const cs=$x('cornerStyle');if(cs)cs.addEventListener('change',()=>{window.qrCornerStyle=cs.value;document.querySelector('#fg')?.dispatchEvent(new Event('input',{bubbles:true}))});
+            document.querySelectorAll('[data-preset=shadow],[data-preset=polaroid],[data-preset=scanme]').forEach(btn=>btn.addEventListener('click',()=>{
+              const p=btn.dataset.preset;if(p==='scanme'){const l=$x('labelText');if(l){l.value='SCAN ME';l.dispatchEvent(new Event('input',{bubbles:true}))}}
+              const stage=document.querySelector('.qrstage');if(stage){stage.style.boxShadow=p==='shadow'?'0 18px 45px rgba(24,24,27,.18)':p==='polaroid'?'0 8px 28px rgba(24,24,27,.14)':'none';stage.style.borderWidth=p==='polaroid'?'10px':'1px';stage.style.borderColor=p==='polaroid'?'#fff':'#ececf1'}
+            }));
+          });})();
+          </script>"""
+          s=s.replace('</body>',hook+'</body>')
+          # Add commercial-use FAQ without expanding answers by default.
+          faq='''<details class="faq-item"><summary>Can I use these QR codes commercially?</summary><p>Yes. You can use QR codes you create here for business cards, menus, packaging, signs, labels, events and other commercial uses. Make sure you have permission to use any logos or content you add.</p></details>'''
+          marker='</div></section><footer'
+          if marker in s: s=s.replace(marker,faq+'</div></section><footer',1)
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR Product Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Add exact colors corner styles presets and print guidance' || exit 0
+          git push
