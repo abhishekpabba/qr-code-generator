@@ -2,12 +2,13 @@
   "framework": null,
   "outputDirectory": "public",
   "rewrites": [
-    { "source": "/", "destination": "/index-v4.html" },
-    { "source": "/app", "destination": "/index-v4.html" },
-    { "source": "/app/", "destination": "/index-v4.html" }
+    { "source": "/", "destination": "/index.html" },
+    { "source": "/app", "destination": "/index.html" },
+    { "source": "/app/", "destination": "/index.html" }
   ],
   "headers": [
     { "source": "/favicon.svg", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
-    { "source": "/site.css", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] }
+    { "source": "/site.css", "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }] },
+    { "source": "/index.html", "headers": [{ "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }] }
   ]
 }
