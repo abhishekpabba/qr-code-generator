@@ -1,0 +1,31 @@
+name: Reset all QR add-ons
+on:
+  push:
+    paths: ['.github/workflows/reset-all-addons.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Strengthen Reset Design
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html'); s=p.read_text()
+          start=s.find("$('resetDesign').onclick=")
+          if start<0: raise SystemExit('reset handler not found')
+          end=s.find(";$('toggleAdvanced')",start)
+          if end<0: raise SystemExit('reset handler end not found')
+          reset="""$('resetDesign').onclick=()=>{type='url';shape='square';centerImage=null;selectedIcon='';dotStyle='square';fg='#111111';bg='#ffffff';if(typeof gradientType!=='undefined')gradientType='none';if(typeof gradientStart!=='undefined')gradientStart='#111111';if(typeof gradientEnd!=='undefined')gradientEnd='#5f4bd5';['fg','bg'].forEach((id,i)=>{if($(id))$(id).value=i?bg:fg});if($('dotStyle'))$('dotStyle').value='square';if($('qrSize'))$('qrSize').value='320';if($('logoSize'))$('logoSize').value='24';if($('labelText'))$('labelText').value='';if($('ctaFrame'))$('ctaFrame').value='none';if($('frameStyle'))$('frameStyle').value='none';if($('gradientType'))$('gradientType').value='none';if($('gradientStart'))$('gradientStart').value='#111111';if($('gradientEnd'))$('gradientEnd').value='#5f4bd5';if($('logo'))$('logo').value='';if($('logoLabel'))$('logoLabel').textContent='＋ Upload image';document.querySelectorAll('.type').forEach(b=>b.classList.toggle('active',b.dataset.type==='url'));document.querySelectorAll('.shape').forEach(b=>b.classList.toggle('active',b.dataset.shape==='square'));document.querySelectorAll('.icon-btn,.preset').forEach(b=>b.classList.remove('active'));document.querySelectorAll('input[type=checkbox]').forEach(x=>x.checked=false);['moreTypes','advancedDesign','bulkBox','moreIcons'].forEach(id=>$(id)?.classList.remove('open'));if($('toggleTypes'))$('toggleTypes').textContent='＋ More QR types';if($('toggleIcons'))$('toggleIcons').textContent='Show more';$('toggleAdvanced')?.classList.remove('active');$('toggleBulk')?.classList.remove('active');try{localStorage.removeItem('qr-current-design')}catch(e){}render();update();};"""
+          s=s[:start]+reset+s[end+1:]
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR UI Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Reset QR generator to clean defaults and remove all add-ons' || exit 0
+          git push
