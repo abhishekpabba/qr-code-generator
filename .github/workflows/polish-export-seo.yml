@@ -1,0 +1,95 @@
+name: QR export and SEO polish
+on:
+  push:
+    paths: ['.github/workflows/polish-export-seo.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply production polish
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p=Path('public/index.html'); s=p.read_text()
+
+          # Social sharing metadata.
+          canonical='<link rel="canonical" href="https://qr-code-generator-beta-eight.vercel.app/">'
+          social='''<link rel="canonical" href="https://qr-code-generator-beta-eight.vercel.app/"><meta property="og:type" content="website"><meta property="og:title" content="Free QR Code Generator | Custom Designs, Logos & High-Res Export"><meta property="og:description" content="Create custom QR codes with logos, frames, gradients, PNG, JPG, SVG and PDF downloads. Free with no signup required."><meta property="og:url" content="https://qr-code-generator-beta-eight.vercel.app/"><meta property="og:image" content="https://qr-code-generator-beta-eight.vercel.app/og.png"><meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="Free QR Code Generator"><meta name="twitter:description" content="Free custom QR codes with logos, gradients, frames and high-resolution exports."><meta name="twitter:image" content="https://qr-code-generator-beta-eight.vercel.app/og.png">'''
+          if canonical in s and 'property="og:title"' not in s: s=s.replace(canonical,social,1)
+
+          # JSZip for one-click bulk ZIP downloads.
+          jspdf='<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>'
+          if 'jszip' not in s.lower(): s=s.replace(jspdf,jspdf+'<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>',1)
+
+          # High resolution size presets and larger max size.
+          s=s.replace('id="qrSize" type="range" min="180" max="600" value="320" step="10"','id="qrSize" type="range" min="180" max="4096" value="512" step="16"')
+          if 'data-size="1024"' not in s:
+            marker='<span id="qrSizeVal" class="rangeValue">320 px</span></div></div>'
+            sizes='<span id="qrSizeVal" class="rangeValue">512 px</span></div><div class="quickbar" aria-label="QR resolution presets"><button type="button" class="chip size-preset" data-size="512">512</button><button type="button" class="chip size-preset" data-size="1024">1024</button><button type="button" class="chip size-preset" data-size="2048">2048</button><button type="button" class="chip size-preset" data-size="4096">4096</button></div></div>'
+            s=s.replace(marker,sizes,1)
+
+          # Advanced controls: transparent background, quiet zone, scan resilience.
+          if 'id="transparentBg"' not in s:
+            anchor='<div class="field"><label>CTA frame</label><select id="ctaFrame" class="input">'
+            extras='''<div class="field"><label><input id="transparentBg" type="checkbox"> Transparent background</label></div><div class="field"><label>Quiet zone / margin</label><select id="quietZone" class="input"><option value="8">Compact</option><option value="16" selected>Recommended</option><option value="24">Wide</option><option value="32">Extra wide</option></select></div><div class="field"><label>Scan resilience</label><select id="ecc" class="input"><option value="auto" selected>Automatic</option><option value="M">Standard</option><option value="Q">High</option><option value="H">Maximum</option></select></div>'''
+            s=s.replace(anchor,extras+anchor,1)
+
+          # Custom CTA field directly beside the frame control.
+          if 'id="customCta"' not in s:
+            end='</select></div></div></div></div>'
+            custom='</select></div><div id="customCtaWrap" class="field" style="display:none"><label>Custom frame text</label><input id="customCta" class="input" maxlength="40" placeholder="Scan for menu"></div></div></div></div>'
+            idx=s.find('<select id="ctaFrame"')
+            if idx!=-1:
+              endidx=s.find(end,idx)
+              if endidx!=-1:s=s[:endidx]+s[endidx:].replace(end,custom,1)
+
+          # Bulk ZIP button.
+          if 'id="bulkZip"' not in s:
+            s=s.replace('<div id="bulkResults" class="history-list" style="margin-top:10px"></div>','<div id="bulkResults" class="history-list" style="margin-top:10px"></div><button id="bulkZip" class="btn" type="button" style="margin-top:10px" disabled>Download all as ZIP</button>',1)
+
+          # Clipboard action next to Email / Share / Print.
+          if 'id="copyQr"' not in s:
+            s=s.replace('<button id="emailCode" class="btn" aria-label="Email QR code">✉ Email QR</button>','<button id="copyQr" class="btn" aria-label="Copy QR image to clipboard">⧉ Copy</button><button id="emailCode" class="btn" aria-label="Email QR code">✉ Email QR</button>',1)
+
+          # Footer and trust copy.
+          if '<footer class="site-footer">' not in s:
+            footer='''<footer class="site-footer"><div class="shell"><strong>Free QR Code Generator</strong><p>Static QR codes are generated in your browser. No account is required.</p><nav><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/wifi-qr-code-generator/">WiFi QR</a><a href="/vcard-qr-code-generator/">vCard QR</a><a href="/svg-qr-code-generator/">SVG QR</a></nav></div></footer>'''
+            s=s.replace('</body>',footer+'</body>',1)
+
+          # Styling for checkerboard, footer, compact resolution controls.
+          if '.site-footer{' not in s:
+            css='''<style>.site-footer{border-top:1px solid var(--line);background:#fff;padding:28px 0 34px;margin-top:30px}.site-footer p{color:var(--muted);font-size:13px}.site-footer nav{display:flex;gap:16px;flex-wrap:wrap}.site-footer a{color:#5f4bd5;text-decoration:none;font-size:13px;font-weight:700}.qrstage.transparent-preview{background-color:#fff;background-image:linear-gradient(45deg,#eee 25%,transparent 25%),linear-gradient(-45deg,#eee 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#eee 75%),linear-gradient(-45deg,transparent 75%,#eee 75%);background-size:20px 20px;background-position:0 0,0 10px,10px -10px,-10px 0}.size-preset{padding:7px 10px}@media(max-width:600px){.site-footer{padding:22px 0}.site-footer nav{gap:12px}.quickbar{gap:6px}}</style>'''
+            s=s.replace('</head>',css+'</head>',1)
+
+          # Runtime behavior layered on stable generator.
+          if 'qrPolishReady' not in s:
+            js=r'''<script>
+            (()=>{window.qrPolishReady=true;const $=id=>document.getElementById(id);
+              document.querySelectorAll('.size-preset').forEach(b=>b.addEventListener('click',()=>{const v=b.dataset.size;$('qrSize').value=v;$('qrSize').dispatchEvent(new Event('input',{bubbles:true}));document.querySelectorAll('.size-preset').forEach(x=>x.classList.toggle('active',x===b));}));
+              const cta=$('ctaFrame'),wrap=$('customCtaWrap'),custom=$('customCta');
+              cta?.addEventListener('change',()=>{if(wrap)wrap.style.display=cta.value==='custom'?'block':'none';if(cta.value==='custom'&&custom){$('labelText').value=custom.value;$('labelText').dispatchEvent(new Event('input',{bubbles:true}))}});
+              custom?.addEventListener('input',()=>{if(cta?.value==='custom'){$('labelText').value=custom.value;$('labelText').dispatchEvent(new Event('input',{bubbles:true}))}});
+              $('transparentBg')?.addEventListener('change',e=>{$('qrImage')?.closest('.qrstage')?.classList.toggle('transparent-preview',e.target.checked);if(e.target.checked){$('bg').dataset.before=$('bg').value;$('bg').value='#ffffff'}else if($('bg').dataset.before){$('bg').value=$('bg').dataset.before}$('bg').dispatchEvent(new Event('input',{bubbles:true}))});
+              $('copyQr')?.addEventListener('click',async()=>{try{const img=$('qrImage');const r=await fetch(img.src);const blob=await r.blob();if(navigator.clipboard&&window.ClipboardItem){await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);$('status').textContent='QR image copied to clipboard.'}else{$('status').textContent='Image clipboard is not supported in this browser.'}}catch(e){$('status').textContent='Could not copy the QR image.'}});
+              const zipBtn=$('bulkZip');
+              const bulk=$('bulkFile');
+              bulk?.addEventListener('change',()=>setTimeout(()=>{if(zipBtn)zipBtn.disabled=!$('bulkResults')?.querySelector('a[download]')},1500));
+              zipBtn?.addEventListener('click',async()=>{const links=[...$('bulkResults').querySelectorAll('a[download]')];if(!links.length)return;zipBtn.disabled=true;zipBtn.textContent='Preparing ZIP…';try{const zip=new JSZip();for(let i=0;i<links.length;i++){const blob=await (await fetch(links[i].href)).blob();zip.file(`qr-${i+1}.png`,blob)}const out=await zip.generateAsync({type:'blob'});const a=document.createElement('a');a.href=URL.createObjectURL(out);a.download='qr-codes.zip';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}finally{zipBtn.disabled=false;zipBtn.textContent='Download all as ZIP'}});
+              // Keep selected advanced values available to the existing renderer when it supports them.
+              ['quietZone','ecc'].forEach(id=>$(id)?.addEventListener('change',()=>{$('qrSize')?.dispatchEvent(new Event('input',{bubbles:true}))}));
+            })();</script>'''
+            s=s.replace('</body>',js+'</body>',1)
+
+          p.write_text(s)
+      - name: Commit polish
+        run: |
+          git config user.name 'QR Polish Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Add high-res exports copy bulk ZIP transparency and social metadata' || exit 0
+          git push
