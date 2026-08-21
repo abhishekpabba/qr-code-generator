@@ -1,0 +1,53 @@
+name: Decouple live QR preview from export size
+on:
+  push:
+    paths: ['.github/workflows/fix-preview-export-decouple.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Keep preview fixed while export resolution changes
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p=Path('public/index.html')
+          s=p.read_text()
+
+          # In the stable live SVG renderer, keep the selected size only as export metadata.
+          # The preview itself always renders at a fixed 320px so 512/1024/2048/4096
+          # never zoom or crop the Live Preview card.
+          old="const size=Math.max(180,Number(g('qrSize')?.value||512));\n    const opts={width:size,height:size,type:'svg'"
+          new="const size=Math.max(180,Number(g('qrSize')?.value||512));\n    const previewSize=320;\n    const opts={width:previewSize,height:previewSize,type:'svg'"
+          if old in s:
+              s=s.replace(old,new,1)
+          else:
+              s=re.sub(
+                r"const size=Math\.max\(180,Number\(g\('qrSize'\)\?\.value\|\|512\)\);\s*const opts=\{width:size,height:size,type:'svg'",
+                "const size=Math.max(180,Number(g('qrSize')?.value||512));const previewSize=320;const opts={width:previewSize,height:previewSize,type:'svg'",
+                s,
+                count=1
+              )
+
+          # Make the native SVG always fit the card regardless of the chosen export size.
+          css='''<style id="fixed-live-preview-size">
+          #qrStable,#qrLive{width:100%!important;display:flex!important;align-items:center!important;justify-content:center!important;overflow:hidden!important}
+          #qrStable svg,#qrLive svg{width:min(320px,100%)!important;height:auto!important;max-width:100%!important;display:block!important}
+          .qrstage{overflow:hidden!important}
+          @media(max-width:600px){#qrStable svg,#qrLive svg{width:min(280px,100%)!important}}
+          </style>'''
+          if 'id="fixed-live-preview-size"' not in s:
+              s=s.replace('</head>',css+'</head>',1)
+
+          p.write_text(s)
+      - name: Commit fix
+        run: |
+          git config user.name 'QR Preview Export Fix Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Keep live preview fixed while export size changes' || exit 0
+          git push
