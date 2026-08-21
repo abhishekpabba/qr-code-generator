@@ -1,0 +1,33 @@
+name: Fix QR foreground color
+on:
+  push:
+    paths: ['.github/workflows/fix-foreground-color.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch foreground rendering
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html')
+          s=p.read_text()
+          old="x.drawImage(img,pad,pad,s,s);x.restore();"
+          new="""const off=document.createElement('canvas');off.width=s;off.height=s;const ox=off.getContext('2d');ox.drawImage(img,0,0,s,s);ox.globalCompositeOperation='source-in';ox.fillStyle=$('fg').value;ox.fillRect(0,0,s,s);x.drawImage(off,pad,pad,s,s);x.restore();"""
+          if old not in s:
+            raise SystemExit('target draw call not found')
+          s=s.replace(old,new,1)
+          # Ensure the QR source itself is transparent so only QR modules are recolored.
+          s=s.replace("backgroundOptions:{color:$('bg').value}","backgroundOptions:{color:'transparent'}",1)
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR Fix Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Fix QR foreground color rendering on Safari' || exit 0
+          git push
