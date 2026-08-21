@@ -100,4 +100,16 @@ window.addEventListener('DOMContentLoaded',()=>{
 });</script><script>
 window.va = window.va || function () { (window.vaq = window.vaq || []).push(arguments); };
 </script>
-<script defer src="/_vercel/insights/script.js"></script></body></html>
+<script defer src="/_vercel/insights/script.js"></script><script>
+(()=>{const $x=id=>document.getElementById(id);const valid=v=>/^#[0-9a-f]{6}$/i.test(v);
+window.addEventListener('DOMContentLoaded',()=>{
+  const f=$x('fgHex'),b=$x('bgHex'),fc=$x('fg'),bc=$x('bg');
+  if(f&&fc){fc.addEventListener('input',()=>f.value=fc.value);f.addEventListener('change',()=>{if(valid(f.value)){fc.value=f.value;fc.dispatchEvent(new Event('input',{bubbles:true}))}})}
+  if(b&&bc){bc.addEventListener('input',()=>b.value=bc.value);b.addEventListener('change',()=>{if(valid(b.value)){bc.value=b.value;bc.dispatchEvent(new Event('input',{bubbles:true}))}})}
+  const cs=$x('cornerStyle');if(cs)cs.addEventListener('change',()=>{window.qrCornerStyle=cs.value;document.querySelector('#fg')?.dispatchEvent(new Event('input',{bubbles:true}))});
+  document.querySelectorAll('[data-preset=shadow],[data-preset=polaroid],[data-preset=scanme]').forEach(btn=>btn.addEventListener('click',()=>{
+    const p=btn.dataset.preset;if(p==='scanme'){const l=$x('labelText');if(l){l.value='SCAN ME';l.dispatchEvent(new Event('input',{bubbles:true}))}}
+    const stage=document.querySelector('.qrstage');if(stage){stage.style.boxShadow=p==='shadow'?'0 18px 45px rgba(24,24,27,.18)':p==='polaroid'?'0 8px 28px rgba(24,24,27,.14)':'none';stage.style.borderWidth=p==='polaroid'?'10px':'1px';stage.style.borderColor=p==='polaroid'?'#fff':'#ececf1'}
+  }));
+});})();
+</script></body></html>
