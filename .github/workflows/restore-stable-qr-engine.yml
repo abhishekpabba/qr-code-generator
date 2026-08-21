@@ -1,0 +1,77 @@
+name: Restore stable QR engine
+on:
+  push:
+    paths: ['.github/workflows/restore-stable-qr-engine.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Replace core QR engine with fresh-instance renderer
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+          p=Path('public/index.html'); s=p.read_text()
+          start=s.find('<script>const T=')
+          end=s.find('renderIcons();render();</script>',start)
+          if start<0 or end<0: raise SystemExit('core QR script not found')
+          end += len('renderIcons();render();</script>')
+          core=r'''<script>
+const T={
+url:()=>'<div class="field"><label>Website URL</label><input id="url" class="input" value="https://example.com"></div>',
+text:()=>'<div class="field"><label>Text</label><textarea id="text" class="input">Hello!</textarea></div>',
+wifi:()=>'<div class="grid2"><div class="field"><label>Network name</label><input id="ssid" class="input"></div><div class="field"><label>Password</label><input id="password" class="input"></div></div>',
+email:()=>'<div class="grid2"><div class="field"><label>Email address</label><input id="email" class="input"></div><div class="field"><label>Subject</label><input id="subject" class="input"></div></div>',
+phone:()=>'<div class="field"><label>Phone number</label><input id="phone" class="input"></div>',
+sms:()=>'<div class="grid2"><div class="field"><label>Phone</label><input id="smsPhone" class="input"></div><div class="field"><label>Message</label><input id="smsText" class="input"></div></div>',
+whatsapp:()=>'<div class="grid2"><div class="field"><label>WhatsApp number</label><input id="waPhone" class="input"></div><div class="field"><label>Message</label><input id="waText" class="input"></div></div>',
+vcard:()=>'<div class="grid2"><div class="field"><label>Name</label><input id="name" class="input"></div><div class="field"><label>Phone</label><input id="vphone" class="input"></div><div class="field"><label>Email</label><input id="vemail" class="input"></div><div class="field"><label>Website</label><input id="vweb" class="input"></div></div>'
+};
+const ICONS=[['instagram','Instagram','<rect x="4" y="4" width="16" height="16" rx="5" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="2"/><circle cx="17.5" cy="6.5" r="1.2"/>'],['tiktok','TikTok','<path d="M14 3v10a4 4 0 1 1-3.5-4" fill="none" stroke="currentColor" stroke-width="2.2"/><path d="M14 3c1 2.5 2.5 3.7 4.6 4" fill="none" stroke="currentColor" stroke-width="2.2"/>'],['facebook','Facebook','<path d="M13.5 21v-8h3l.5-3h-3.5V8c0-1 .4-1.6 1.8-1.6H17V3.7c-.5-.1-1.3-.2-2.4-.2-2.6 0-4.3 1.6-4.3 4.4V10H8v3h2.3v8z" fill="currentColor"/>'],['youtube','YouTube','<rect x="3" y="6" width="18" height="12" rx="4" fill="currentColor"/><path d="M10 9l6 3-6 3z" fill="#fff"/>'],['snapchat','Snapchat','<path d="M12 3c3 0 4.5 2.3 4.5 5.2 0 2 1 2.8 2.2 3.5-.5.8-1.3 1.2-2.1 1.4.1 1.2.7 2.2 1.6 3-.8.5-1.8.5-2.6.4-.8 1.2-2.1 1.9-3.6 1.9s-2.8-.7-3.6-1.9c-.8.1-1.8.1-2.6-.4.9-.8 1.5-1.8 1.6-3-.8-.2-1.6-.6-2.1-1.4 1.2-.7 2.2-1.5 2.2-3.5C7.5 5.3 9 3 12 3z" fill="currentColor"/>'],['web','Web','<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M3 12h18M12 3c3 3 4 6 4 9s-1 6-4 9c-3-3-4-6-4-9s1-6 4-9z" fill="none" stroke="currentColor" stroke-width="2"/>'],['whatsapp','WhatsApp','<circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2"/><path d="M8 8c1 4 4 7 8 8l2-2" fill="none" stroke="currentColor" stroke-width="2"/>'],['linkedin','LinkedIn','<rect x="4" y="9" width="3" height="11" fill="currentColor"/><circle cx="5.5" cy="5.5" r="1.8"/><path d="M10 9h3v1.5c1-1.2 2.2-1.8 3.8-1.8 2.7 0 4.2 1.8 4.2 5.2V20h-3v-5.5c0-2-.7-3-2.2-3-1.8 0-2.8 1.2-2.8 3.6V20h-3z" fill="currentColor"/>'],['x','X','<path d="M5 4l14 16M19 4L5 20" fill="none" stroke="currentColor" stroke-width="2.4"/>'],['email','Email','<rect x="3" y="5" width="18" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><path d="M4 7l8 6 8-6" fill="none" stroke="currentColor" stroke-width="2"/>'],['phone','Phone','<path d="M7 3l3 4-2 2c1 3 3 5 6 6l2-2 4 3c-1 3-3 5-6 4-5-2-9-6-11-11-1-3 1-5 4-6z" fill="currentColor"/>'],['wifi','WiFi','<path d="M3 9c5.5-4.5 12.5-4.5 18 0M6.5 12.5c3.4-2.8 7.6-2.8 11 0M10 16c1.3-1 2.7-1 4 0" fill="none" stroke="currentColor" stroke-width="2.2"/><circle cx="12" cy="19" r="1.5"/>'],['reviews','Reviews','<path d="M12 3l2.5 5 5.6.9-4 3.9.9 5.5-5-2.6-5 2.6.9-5.5-4-3.9 5.6-.9z" fill="currentColor"/>'],['link','Link','<path d="M9.5 14.5l5-5M8 17H6a4 4 0 0 1 0-8h3M16 7h2a4 4 0 0 1 0 8h-3" fill="none" stroke="currentColor" stroke-width="2"/>']];
+let type='url',logo=null,shape='square',activeIcon='',timer=0,version=0;
+const $=id=>document.getElementById(id);function val(id){return($(id)?.value||'').trim()}
+function payload(){if(type==='url'){let u=val('url')||'https://example.com';if(!/^https?:\/\//i.test(u))u='https://'+u;return u}if(type==='text')return val('text')||'Hello!';if(type==='wifi')return`WIFI:T:WPA;S:${val('ssid')};P:${val('password')};;`;if(type==='email')return`mailto:${val('email')}?subject=${encodeURIComponent(val('subject'))}`;if(type==='phone')return'tel:'+val('phone').replace(/[^+\d]/g,'');if(type==='sms')return`SMSTO:${val('smsPhone')}:${val('smsText')}`;if(type==='whatsapp')return`https://wa.me/${val('waPhone').replace(/\D/g,'')}?text=${encodeURIComponent(val('waText'))}`;if(type==='vcard')return`BEGIN:VCARD\nVERSION:3.0\nFN:${val('name')}\nTEL:${val('vphone')}\nEMAIL:${val('vemail')}\nURL:${val('vweb')}\nEND:VCARD`;return val('url')||val('text')||'Hello!'}
+function iconData(path){const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="240" height="240" viewBox="0 0 24 24"><rect width="24" height="24" rx="5" fill="#fff"/>${path.replaceAll('currentColor','#111')}</svg>`;return'data:image/svg+xml;base64,'+btoa(unescape(encodeURIComponent(svg)))}
+const TOP_ICON_IDS=['instagram','facebook','web','tiktok'];
+function iconBtn(i){const[id,n,p]=i;return`<button class="icon-btn${id===activeIcon?' active':''}" data-id="${id}" type="button"><svg viewBox="0 0 24 24">${p}</svg><span>${n==='Web'?'Website':n}</span></button>`}
+function bindIconButtons(root){root.querySelectorAll('button').forEach(b=>b.onclick=()=>{const i=ICONS.find(x=>x[0]===b.dataset.id);activeIcon=i[0];logo=iconData(i[2]);$('logo').value='';$('logoLabel').textContent='＋ Upload center logo';renderIcons();schedule()})}
+function renderIcons(){const top=TOP_ICON_IDS.map(id=>ICONS.find(i=>i[0]===id)).filter(Boolean),rest=ICONS.filter(i=>!TOP_ICON_IDS.includes(i[0]));$('iconTop').innerHTML=top.map(iconBtn).join('');$('iconExtra').innerHTML=rest.map(iconBtn).join('');bindIconButtons($('iconTop'));bindIconButtons($('iconExtra'))}
+$('clearIcon').onclick=()=>{activeIcon='';logo=null;$('logo').value='';$('logoLabel').textContent='＋ Upload center logo';renderIcons();schedule()};
+function blobImg(blob){return new Promise((res,rej)=>{const u=URL.createObjectURL(blob),i=new Image();i.onload=()=>{URL.revokeObjectURL(u);res(i)};i.onerror=rej;i.src=u})}
+function dataImg(src){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src})}
+async function rawQrPng(size,data){const host=document.createElement('div');host.style.cssText='position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;overflow:hidden';document.body.appendChild(host);const q=new QRCodeStyling({width:size,height:size,type:'canvas',data,margin:Math.max(8,Math.round(size*.03)),qrOptions:{errorCorrectionLevel:logo?'H':'Q'},dotsOptions:{type:$('dotStyle').value,color:$('fg').value},backgroundOptions:{color:'transparent'}});q.append(host);await new Promise(r=>setTimeout(r,30));const raw=await q.getRawData('png');host.remove();return raw}
+async function canvas(){const selected=+$('qrSize').value;const s=Math.min(selected,1200);$('qrSizeVal').textContent=selected+' px';$('logoSizeVal').textContent=$('logoSize').value+'%';const data=(window.__dynamicRedirect&&type==='url')?location.origin+window.__dynamicRedirect:payload();const raw=await rawQrPng(s,data);const img=await blobImg(raw),pad=shape==='round'?36:18,label=val('labelText'),lh=label?64:0,w=s+pad*2,h=s+pad*2+lh,c=document.createElement('canvas'),x=c.getContext('2d');c.width=w;c.height=h;x.fillStyle=$('bg').value;if(shape==='round'){x.beginPath();x.arc(w/2,w/2,w/2,0,Math.PI*2);x.fill();x.save();x.beginPath();x.arc(w/2,w/2,w/2,0,Math.PI*2);x.clip()}else if(shape==='rounded'){x.beginPath();x.roundRect?x.roundRect(0,0,w,h,26):x.rect(0,0,w,h);x.fill();x.save();x.beginPath();x.roundRect?x.roundRect(0,0,w,h,26):x.rect(0,0,w,h);x.clip()}else{x.fillRect(0,0,w,h);x.save()}x.drawImage(img,pad,pad,s,s);x.restore();if(logo){const li=await dataImg(logo),iw=Math.max(28,Math.round(s*(+$('logoSize').value/100))),cx=pad+s/2,cy=pad+s/2,bp=Math.max(6,Math.round(iw*.13)),bw=iw+bp*2,bx=cx-bw/2,by=cy-bw/2;x.fillStyle='#fff';x.beginPath();if(x.roundRect)x.roundRect(bx,by,bw,bw,Math.max(8,Math.round(bw*.18)));else x.rect(bx,by,bw,bw);x.fill();x.drawImage(li,cx-iw/2,cy-iw/2,iw,iw)}if(label){x.fillStyle=$('fg').value;x.font='700 32px Arial';x.textAlign='center';x.textBaseline='middle';x.fillText(label,w/2,s+pad+34)}return c}
+async function preview(){const v=++version;try{const c=await canvas();if(v!==version)return;$('qrImage').src=c.toDataURL('image/png');$('qrImage').style.width=Math.min(c.width,600)+'px';$('status').textContent='';$('status').className='status'}catch(e){console.error(e);$('status').textContent='Could not update preview.';$('status').className='status error'}}
+function schedule(){clearTimeout(timer);timer=setTimeout(preview,120)}window.update=schedule;
+function render(){$('fields').innerHTML=T[type]?T[type]():'';$('fields').querySelectorAll('input,textarea,select').forEach(e=>{e.addEventListener('input',schedule);e.addEventListener('change',schedule)});schedule()}
+document.querySelectorAll('.type').forEach(b=>b.onclick=()=>{document.querySelectorAll('.type').forEach(x=>x.classList.remove('active'));b.classList.add('active');type=b.dataset.type;render()});
+$('toggleTypes').onclick=()=>{const o=$('moreTypes').classList.toggle('open');$('toggleTypes').textContent=o?'− Fewer QR types':'＋ More QR types'};
+$('toggleIcons').onclick=()=>{const o=$('iconExtra').classList.toggle('open');$('toggleIcons').textContent=o?'Show less':'Show more'};
+document.querySelectorAll('.shape').forEach(b=>b.onclick=()=>{document.querySelectorAll('.shape').forEach(x=>x.classList.remove('active'));b.classList.add('active');shape=b.dataset.shape;schedule()});
+['fg','bg','dotStyle','labelText','qrSize','logoSize'].forEach(id=>{const el=$(id);el?.addEventListener('input',schedule);el?.addEventListener('change',schedule)});
+$('logo').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader;r.onload=()=>{logo=r.result;activeIcon='';$('logoLabel').textContent='✓ '+f.name;renderIcons();schedule()};r.readAsDataURL(f)};
+function save(blob,name){const u=URL.createObjectURL(blob),a=document.createElement('a');a.href=u;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200)}
+function pngBlob(c){return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('PNG failed')),'image/png'))}
+function canvasBlob(c,mime,quality=.95){return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('File creation failed')),mime,quality))}
+function pdfBlob(c){const{jsPDF}=window.jspdf,p=new jsPDF({orientation:c.width>c.height?'landscape':'portrait',unit:'px',format:[c.width,c.height]});p.addImage(c.toDataURL('image/png'),'PNG',0,0,c.width,c.height);return p.output('blob')}
+async function selectedFile(){const f=$('format').value,c=await canvas();if(f==='pdf')return new File([pdfBlob(c)],'qr-code.pdf',{type:'application/pdf'});if(f==='svg'){const png=c.toDataURL('image/png'),svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${c.width}" height="${c.height}" viewBox="0 0 ${c.width} ${c.height}"><image href="${png}" width="${c.width}" height="${c.height}"/></svg>`;return new File([svg],'qr-code.svg',{type:'image/svg+xml'})}if(f==='jpg')return new File([await canvasBlob(c,'image/jpeg',.95)],'qr-code.jpg',{type:'image/jpeg'});return new File([await pngBlob(c)],'qr-code.png',{type:'image/png'})}
+async function shareFile(file,text='My QR Code'){if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){await navigator.share({title:'My QR Code',text,files:[file]});return true}return false}
+$('download').onclick=async()=>{const b=$('download');b.disabled=true;try{const file=await selectedFile();save(file,file.name);$('status').textContent='Download started.'}catch(e){$('status').textContent='Could not download. Please try again.';$('status').className='status error'}finally{b.disabled=false}};
+$('emailCode').onclick=async()=>{try{const file=await selectedFile();if(!await shareFile(file,'QR code attached. Choose Mail to email it.'))location.href='mailto:?subject='+encodeURIComponent('My QR Code')}catch(e){if(e?.name!=='AbortError')$('status').textContent='Could not prepare the email attachment.'}};
+$('share').onclick=async()=>{try{const file=await selectedFile();if(!await shareFile(file))$('status').textContent='File sharing is not supported in this browser.'}catch(e){if(e?.name!=='AbortError')$('status').textContent='Could not share the QR file.'}};
+$('print').onclick=async()=>{const c=await canvas(),w=window.open('','_blank');w.document.write(`<img src="${c.toDataURL('image/png')}" style="max-width:100%">`);w.document.close();setTimeout(()=>w.print(),250)};
+renderIcons();render();
+</script>'''
+          s=s[:start]+core+s[end:]
+          p.write_text(s)
+      - name: Commit stable QR engine
+        run: |
+          git config user.name 'QR Reliability Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Restore tested QR generation engine with fresh renders' || exit 0
+          git push
