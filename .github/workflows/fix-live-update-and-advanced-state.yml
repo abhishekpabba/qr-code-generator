@@ -1,0 +1,75 @@
+name: Fix QR live updates and advanced state
+on:
+  push:
+    paths: ['.github/workflows/fix-live-update-and-advanced-state.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Repair live updates and selection feedback
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html'); s=p.read_text()
+          style="""<style id='live-repair-style'>
+          .selected-summary{margin-top:8px;font-size:11px;color:#5f4bd5;font-weight:700;line-height:1.5}.selected-summary:empty{display:none}
+          .preset.active,.size-preset.active,.chip.active{border-color:#9585e8!important;background:#f5f2ff!important;color:#5942d1!important}
+          </style>"""
+          s=s.replace('</head>',style+'</head>',1)
+          repair="""<script id='live-repair-controller'>
+          (()=>{
+            const byId=id=>document.getElementById(id);
+            const refresh=()=>{try{if(typeof update==='function')update();}catch(e){console.error('QR update failed',e)}};
+            const delayed=()=>{requestAnimationFrame(()=>setTimeout(refresh,0))};
+            const contrastRatio=(a,b)=>{const lum=h=>{h=(h||'#000000').replace('#','');if(h.length===3)h=h.split('').map(x=>x+x).join('');const c=[0,2,4].map(i=>parseInt(h.slice(i,i+2),16)/255).map(v=>v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4));return .2126*c[0]+.7152*c[1]+.0722*c[2]};const x=lum(a),y=lum(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05)};
+            const updateQuality=()=>{
+              const fg=byId('fg')?.value||'#111111', bg=byId('bg')?.value||'#ffffff', r=contrastRatio(fg,bg);
+              document.querySelectorAll('.quality-pill').forEach(el=>{
+                const t=el.textContent.toLowerCase();
+                if(t.includes('contrast')){el.classList.toggle('warn',r<4.5);el.textContent=r<4.5?'Low contrast':'Contrast OK'}
+                if(t.includes('scan may fail')){el.classList.toggle('warn',r<3);el.textContent=r<3?'Scan may fail':'Scan ready'}
+              });
+            };
+            const advancedSummary=()=>{
+              const btn=byId('toggleAdvanced');if(!btn)return;
+              let box=byId('advancedSelectedSummary');if(!box){box=document.createElement('div');box.id='advancedSelectedSummary';box.className='selected-summary';btn.insertAdjacentElement('afterend',box)}
+              const parts=[];
+              const shape=document.querySelector('.shape.active')?.textContent?.trim();if(shape&&shape.toLowerCase()!=='square')parts.push(shape);
+              const dot=byId('dotStyle')?.selectedOptions?.[0]?.textContent?.trim();if(dot&&dot.toLowerCase()!=='square')parts.push(dot);
+              const corner=byId('cornerStyle')?.selectedOptions?.[0]?.textContent?.trim();if(corner&&corner.toLowerCase()!=='match qr style')parts.push('Eyes: '+corner);
+              const grad=byId('gradientType')?.selectedOptions?.[0]?.textContent?.trim();if(grad&&grad.toLowerCase()!=='none')parts.push(grad+' gradient');
+              const size=byId('qrSize')?.value;if(size&&size!=='320')parts.push(size+'px');
+              const cta=byId('ctaFrame')?.selectedOptions?.[0]?.textContent?.trim();if(cta&&cta.toLowerCase()!=='none')parts.push(cta);
+              const preset=document.querySelector('.preset.active')?.textContent?.trim();if(preset)parts.unshift(preset);
+              box.textContent=parts.length?'Selected: '+parts.join(' · '):'';
+            };
+            window.addEventListener('DOMContentLoaded',()=>{
+              document.addEventListener('input',e=>{
+                if(e.target.closest('.panel')){delayed();setTimeout(()=>{updateQuality();advancedSummary()},30)}
+              });
+              document.addEventListener('change',e=>{
+                if(e.target.closest('.panel')){delayed();setTimeout(()=>{updateQuality();advancedSummary()},30)}
+              });
+              document.addEventListener('click',e=>{
+                const t=e.target.closest('.type,.shape,.icon-btn,.preset,.size-preset,.chip');
+                if(t){if(t.classList.contains('preset')){document.querySelectorAll('.preset').forEach(x=>x.classList.remove('active'));t.classList.add('active')}delayed();setTimeout(()=>{updateQuality();advancedSummary()},50)}
+              });
+              const observer=new MutationObserver(()=>{delayed();advancedSummary()});
+              const panel=document.querySelector('.panel');if(panel)observer.observe(panel,{childList:true,subtree:true});
+              updateQuality();advancedSummary();delayed();
+            });
+          })();
+          </script>"""
+          s=s.replace('</body>',repair+'</body>',1)
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR Repair Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Fix all live QR updates and advanced selection feedback' || exit 0
+          git push
