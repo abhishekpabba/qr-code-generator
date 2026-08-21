@@ -1,0 +1,36 @@
+name: Fix live QR preview fit
+on:
+  push:
+    paths: ['.github/workflows/fix-live-preview-fit.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Constrain native SVG preview to preview card
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html')
+          s=p.read_text()
+          marker='</head>'
+          css='''<style id="qr-preview-fit-fix">
+          /* Preview dimensions are independent from export resolution. */
+          .qrstage{overflow:hidden!important;min-width:0}
+          #qrStable,#qrLive{width:100%!important;max-width:100%!important;min-width:0!important;display:flex!important;align-items:center!important;justify-content:center!important}
+          #qrStable svg,#qrLive svg{display:block!important;width:100%!important;max-width:340px!important;height:auto!important;max-height:340px!important;object-fit:contain!important;flex:0 1 auto!important}
+          @media(max-width:600px){#qrStable svg,#qrLive svg{max-width:100%!important;max-height:none!important}.qrstage{padding:14px!important}}
+          </style>'''
+          if 'id="qr-preview-fit-fix"' not in s:
+              s=s.replace(marker,css+marker,1)
+          p.write_text(s)
+      - name: Commit fix
+        run: |
+          git config user.name 'QR Preview Fix Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Fit live QR preview inside card without reducing export size' || exit 0
+          git push
