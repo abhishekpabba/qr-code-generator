@@ -1,0 +1,28 @@
+name: Simplify footer links
+on:
+  push:
+    paths: ['.github/workflows/minimal-footer-links.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Simplify footer
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html'); s=p.read_text()
+          old='<footer class="site-footer"><div class="shell"><strong>Free QR Code Generator</strong><p>Static QR codes are generated in your browser. No account is required.</p><nav><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/wifi-qr-code-generator/">WiFi QR</a><a href="/vcard-qr-code-generator/">vCard QR</a><a href="/svg-qr-code-generator/">SVG QR</a></nav></div></footer>'
+          new='<footer class="site-footer"><div class="shell"><p>© 2026 QR Code Generator · <a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a></p></div></footer>'
+          if old not in s: raise SystemExit('footer markup not found')
+          p.write_text(s.replace(old,new,1))
+      - name: Commit
+        run: |
+          git config user.name 'QR UI Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Use minimal functional footer links' || exit 0
+          git push
