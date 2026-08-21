@@ -1,0 +1,106 @@
+name: Fix all QR type generation
+on:
+  push:
+    paths: ['.github/workflows/fix-all-qr-types.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch all QR payloads and live field updates
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html'); s=p.read_text()
+          hook=r'''<script id="all-types-fix">
+          (()=>{
+            const el=id=>document.getElementById(id);
+            const get=id=>(el(id)?.value||'').trim();
+            const ensureUrl=v=>{if(!v)return 'https://example.com';return /^https?:\/\//i.test(v)?v:'https://'+v};
+            const escWifi=v=>String(v||'').replace(/([\\;,:"])/g,'\\$1');
+            const phone=v=>String(v||'').replace(/[^+\d]/g,'');
+
+            // Replace the legacy payload builder with a complete implementation.
+            payload=function(){
+              switch(type){
+                case 'url': return ensureUrl(get('url'));
+                case 'text': return get('text') || 'Hello!';
+                case 'wifi': {
+                  const security=get('wifiSecurity')||'WPA';
+                  return `WIFI:T:${security};S:${escWifi(get('ssid'))};P:${escWifi(get('password'))};H:${el('wifiHidden')?.checked?'true':'false'};;`;
+                }
+                case 'email': {
+                  const to=get('email'), subject=get('subject'), body=get('emailBody');
+                  const q=[]; if(subject)q.push('subject='+encodeURIComponent(subject)); if(body)q.push('body='+encodeURIComponent(body));
+                  return `mailto:${to}${q.length?'?'+q.join('&'):''}`;
+                }
+                case 'phone': return 'tel:'+phone(get('phone'));
+                case 'sms': return `SMSTO:${phone(get('smsPhone'))}:${get('smsText')}`;
+                case 'whatsapp': return `https://wa.me/${phone(get('waPhone')).replace('+','')}?text=${encodeURIComponent(get('waText'))}`;
+                case 'vcard': return [
+                  'BEGIN:VCARD','VERSION:3.0',
+                  `FN:${get('name')}`,
+                  get('company')?`ORG:${get('company')}`:'',
+                  get('vphone')?`TEL:${phone(get('vphone'))}`:'',
+                  get('vemail')?`EMAIL:${get('vemail')}`:'',
+                  get('vweb')?`URL:${ensureUrl(get('vweb'))}`:'',
+                  get('address')?`ADR:;;${get('address')};;;;`:'',
+                  'END:VCARD'
+                ].filter(Boolean).join('\n');
+                case 'instagram': return ensureUrl((get('socialValue')||'instagram.com/username').replace(/^@/,'instagram.com/'));
+                case 'tiktok': return ensureUrl((get('socialValue')||'tiktok.com/@username').replace(/^@/,'tiktok.com/@'));
+                case 'youtube': return ensureUrl(get('socialValue')||'youtube.com/@channel');
+                case 'paypal': {
+                  const v=get('paymentValue'); return /^https?:\/\//i.test(v)?v:`https://paypal.me/${v||'username'}`;
+                }
+                case 'venmo': {
+                  const v=get('paymentValue'); return /^https?:\/\//i.test(v)?v:`https://venmo.com/u/${v||'username'}`;
+                }
+                case 'cashapp': {
+                  const v=(get('paymentValue')||'$cashtag').replace(/^\$/,''); return `https://cash.app/$${v}`;
+                }
+                case 'upi': return get('paymentValue')||'upi://pay?pa=name@bank&pn=Name';
+                case 'bitcoin': {
+                  const v=get('paymentValue'); return /^bitcoin:/i.test(v)?v:`bitcoin:${v||'YOUR_ADDRESS'}`;
+                }
+                default: return get('url')||get('text')||'Hello!';
+              }
+            };
+
+            function extendedFields(t){
+              const f=el('fields'); if(!f)return;
+              if(t==='wifi') f.innerHTML=`<div class="grid2"><div class="field"><label>Network name (SSID)</label><input id="ssid" class="input" placeholder="My WiFi"></div><div class="field"><label>Password</label><input id="password" class="input" type="text"></div><div class="field"><label>Security</label><select id="wifiSecurity" class="input"><option value="WPA">WPA/WPA2</option><option value="WEP">WEP</option><option value="nopass">No password</option></select></div><div class="field"><label><input id="wifiHidden" type="checkbox"> Hidden network</label></div></div>`;
+              if(t==='email') f.innerHTML=`<div class="field"><label>Email address</label><input id="email" type="email" class="input" placeholder="hello@example.com"></div><div class="field"><label>Subject</label><input id="subject" class="input" placeholder="Hello"></div><div class="field"><label>Message</label><textarea id="emailBody" class="input" rows="3" placeholder="Your message"></textarea></div>`;
+              if(t==='vcard') f.innerHTML=`<div class="grid2"><div class="field"><label>Name</label><input id="name" class="input"></div><div class="field"><label>Company</label><input id="company" class="input"></div><div class="field"><label>Phone</label><input id="vphone" class="input"></div><div class="field"><label>Email</label><input id="vemail" type="email" class="input"></div><div class="field"><label>Website</label><input id="vweb" class="input"></div><div class="field"><label>Address</label><input id="address" class="input"></div></div>`;
+              if(['instagram','tiktok','youtube'].includes(t)){
+                const labels={instagram:'Instagram username or URL',tiktok:'TikTok username or URL',youtube:'YouTube channel URL'};
+                f.innerHTML=`<div class="field"><label>${labels[t]}</label><input id="socialValue" class="input" placeholder="${t==='youtube'?'https://youtube.com/@channel':'@username'}"></div>`;
+              }
+              if(['paypal','venmo','cashapp','upi','bitcoin'].includes(t)){
+                const labels={paypal:'PayPal username or link',venmo:'Venmo username or link',cashapp:'Cash App $Cashtag',upi:'UPI payment link / ID',bitcoin:'Bitcoin address'};
+                f.innerHTML=`<div class="field"><label>${labels[t]}</label><input id="paymentValue" class="input"></div>`;
+              }
+            }
+
+            // One safe delegated listener covers inputs created after type changes.
+            const refresh=()=>{try{if(typeof schedule==='function')schedule();}catch(e){console.error(e)}};
+            document.addEventListener('input',e=>{if(e.target.closest('#fields'))refresh()},true);
+            document.addEventListener('change',e=>{if(e.target.closest('#fields'))refresh()},true);
+            document.addEventListener('click',e=>{
+              const b=e.target.closest('.type'); if(!b)return;
+              setTimeout(()=>{extendedFields(b.dataset.type);refresh()},0);
+            });
+          })();
+          </script>'''
+          s=s.replace('</body>',hook+'</body>')
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR Types Fix Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Fix Text Email WiFi Contact social and payment QR generation' || exit 0
+          git push
