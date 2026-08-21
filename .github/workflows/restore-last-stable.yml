@@ -1,0 +1,36 @@
+name: Restore last stable homepage
+on:
+  push:
+    paths: ['.github/workflows/restore-last-stable.yml']
+permissions:
+  contents: write
+jobs:
+  restore:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore known-good homepage
+        run: |
+          git show 5254ce5307a24abd737df1455fd8afc94865da15:public/index.html > public/index.html
+      - name: Preserve current footer and analytics loader
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html'); s=p.read_text()
+          # Keep minimalist footer.
+          import re
+          s=re.sub(r'<footer class="site-footer">.*?</footer>', '<footer class="site-footer"><div class="shell"><p>© 2026 QR Code Generator · <a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a></p></div></footer>', s, flags=re.S)
+          # Ensure Vercel analytics is present only once.
+          if '/_vercel/insights/script.js' not in s:
+            s=s.replace('</body>', '<script>window.va=window.va||function(){(window.vaq=window.vaq||[]).push(arguments);};</script><script defer src="/_vercel/insights/script.js"></script></body>')
+          p.write_text(s)
+      - name: Commit restore
+        run: |
+          git config user.name 'QR Recovery Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Restore stable QR generator homepage' || exit 0
+          git push
