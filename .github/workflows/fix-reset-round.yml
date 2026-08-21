@@ -1,0 +1,34 @@
+name: Fix reset and round QR
+on:
+  push:
+    paths: ['.github/workflows/fix-reset-round.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch QR UI
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html'); s=p.read_text()
+          # Round means circular outer crop AND round modules/eyes.
+          s=s.replace("dotsOptions:{type:dotStyle,color:fg}","dotsOptions:{type:shape==='round'?'dots':dotStyle,color:fg},cornersSquareOptions:{type:shape==='round'?'dot':undefined,color:fg},cornersDotOptions:{type:shape==='round'?'dot':undefined,color:fg}")
+          # Replace reset handler with a complete deterministic reset.
+          start=s.find("$('resetDesign').onclick=")
+          if start!=-1:
+            end=s.find(";$('toggleAdvanced')",start)
+            if end!=-1:
+              reset="""$('resetDesign').onclick=()=>{type='url';shape='square';centerImage=null;selectedIcon='';dotStyle='square';fg='#111111';bg='#ffffff';$('fg').value=fg;$('bg').value=bg;$('dotStyle').value='square';$('qrSize').value='320';$('logoSize').value='24';$('labelText').value='';$('logo').value='';$('logoLabel').textContent='＋ Upload image';document.querySelectorAll('.type').forEach(b=>b.classList.toggle('active',b.dataset.type==='url'));document.querySelectorAll('.shape').forEach(b=>b.classList.toggle('active',b.dataset.shape==='square'));document.querySelectorAll('.icon-btn').forEach(b=>b.classList.remove('active'));$('moreTypes').classList.remove('open');$('toggleTypes').textContent='＋ More QR types';$('advancedDesign').classList.remove('open');$('toggleAdvanced').classList.remove('active');$('bulkBox').classList.remove('open');$('toggleBulk').classList.remove('active');render();update();};"""
+              s=s[:start]+reset+s[end+1:]
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR UI Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Fix reset design and fully round QR rendering' || exit 0
+          git push
