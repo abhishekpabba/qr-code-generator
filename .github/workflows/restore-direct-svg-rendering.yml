@@ -1,0 +1,122 @@
+name: Restore direct SVG QR rendering
+on:
+  push:
+    paths: ['.github/workflows/restore-direct-svg-rendering.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore direct SVG live rendering and fresh exports
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html')
+          s=p.read_text()
+          if 'id="direct-svg-renderer"' in s:
+              raise SystemExit('already patched')
+          patch=r'''<style id="direct-svg-renderer-style">
+          #qrLive{width:100%;display:flex;align-items:center;justify-content:center}
+          #qrLive svg,#qrLive canvas{display:block;max-width:100%;height:auto}
+          #qrImage{display:none!important}
+          </style>
+          <script id="direct-svg-renderer">
+          (()=>{
+            const byId=id=>document.getElementById(id);
+            let directTimer=0,directVersion=0,lastPayload='';
+            const currentPayload=()=>{
+              try{
+                if(window.__dynamicRedirect) return location.origin+window.__dynamicRedirect;
+                return typeof payload==='function'?payload():'https://example.com';
+              }catch(e){console.error('payload error',e);return 'https://example.com'}
+            };
+            const liveSize=()=>Math.max(220,Math.min(430,Number(byId('qrSize')?.value||512)));
+            const dotType=()=>byId('dotStyle')?.value||'square';
+            const ecc=()=>{const v=byId('ecc')?.value;return v&&v!=='auto'?v:(typeof logo!=='undefined'&&logo?'H':'Q')};
+            const margin=()=>Number(byId('quietZone')?.value||16);
+            function gradientOptions(){
+              const mode=byId('gradientMode')?.value||'none';
+              if(mode==='none')return null;
+              return {type:mode,rotation:0,colorStops:[{offset:0,color:byId('fg')?.value||'#111111'},{offset:1,color:byId('grad2')?.value||'#6755e7'}]};
+            }
+            function options(size,renderType='svg'){
+              const grad=gradientOptions();
+              const transparent=!!byId('transparentBg')?.checked;
+              const corner=window.qrCornerStyle||'auto';
+              const o={width:size,height:size,type:renderType,data:currentPayload(),margin:margin(),qrOptions:{errorCorrectionLevel:ecc()},dotsOptions:{type:dotType(),color:byId('fg')?.value||'#111111'},backgroundOptions:{color:transparent?'transparent':(byId('bg')?.value||'#ffffff')},image:(typeof logo!=='undefined'&&logo)||undefined,imageOptions:{hideBackgroundDots:true,margin:5,imageSize:Number(byId('logoSize')?.value||24)/100,crossOrigin:'anonymous'}};
+              if(grad){delete o.dotsOptions.color;o.dotsOptions.gradient=grad}
+              if(corner!=='auto'){
+                const ct=corner==='rounded'?'extra-rounded':corner==='round'?'dot':corner;
+                o.cornersSquareOptions={type:ct,color:byId('fg')?.value||'#111111'};
+                o.cornersDotOptions={type:ct==='square'?'square':'dot',color:byId('fg')?.value||'#111111'};
+              }
+              return o;
+            }
+            function applyOuterShape(host){
+              const active=document.querySelector('.shape.active')?.dataset.shape||((typeof shape!=='undefined'&&shape)||'square');
+              host.style.overflow='hidden';
+              host.style.background=byId('transparentBg')?.checked?'transparent':(byId('bg')?.value||'#fff');
+              host.style.borderRadius=active==='round'?'50%':active==='rounded'?'22px':'0';
+              host.style.clipPath=active==='round'?'circle(50% at 50% 50%)':'none';
+            }
+            async function renderDirect(){
+              const v=++directVersion,stage=document.querySelector('.qrstage');if(!stage||!window.QRCodeStyling)return;
+              let host=byId('qrLive');
+              if(!host){host=document.createElement('div');host.id='qrLive';const old=byId('qrImage');old?old.before(host):stage.appendChild(host)}
+              const data=currentPayload();lastPayload=data;
+              host.innerHTML='';applyOuterShape(host);
+              try{
+                const q=new QRCodeStyling(options(liveSize(),'svg'));
+                q.append(host);
+                await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+                if(v!==directVersion)return;
+                const svg=host.querySelector('svg');if(svg){svg.setAttribute('role','img');svg.setAttribute('aria-label','QR code for '+data.slice(0,120));svg.style.width='100%';svg.style.maxWidth=liveSize()+'px';svg.style.height='auto'}
+                const status=byId('status');if(status&&status.textContent==='Could not update preview.')status.textContent='';
+              }catch(e){console.error('direct svg render failed',e)}
+            }
+            function queueDirect(){clearTimeout(directTimer);directTimer=setTimeout(renderDirect,50)}
+            async function freshQRBlob(ext='png',size){
+              const host=document.createElement('div');host.style.cssText='position:fixed;left:-10000px;top:-10000px';document.body.appendChild(host);
+              try{
+                const q=new QRCodeStyling(options(size||Number(byId('qrSize')?.value||1024),ext==='svg'?'svg':'canvas'));q.append(host);
+                await new Promise(r=>setTimeout(r,60));return await q.getRawData(ext==='svg'?'svg':'png');
+              }finally{host.remove()}
+            }
+            const blobToDataURL=blob=>new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsDataURL(blob)});
+            const pngToJpg=async blob=>{const url=URL.createObjectURL(blob);try{const img=new Image();await new Promise((res,rej)=>{img.onload=res;img.onerror=rej;img.src=url});const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;const x=c.getContext('2d');x.fillStyle=byId('bg')?.value||'#fff';x.fillRect(0,0,c.width,c.height);x.drawImage(img,0,0);return await new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('jpg failed')),'image/jpeg',.95))}finally{URL.revokeObjectURL(url)}};
+            async function freshSelectedFile(){
+              const fmt=byId('format')?.value||'png',size=Number(byId('qrSize')?.value||1024);
+              if(fmt==='svg'){const b=await freshQRBlob('svg',size);return new File([b],'qr-code.svg',{type:'image/svg+xml'})}
+              const png=await freshQRBlob('png',size);
+              if(fmt==='jpg'){const j=await pngToJpg(png);return new File([j],'qr-code.jpg',{type:'image/jpeg'})}
+              if(fmt==='pdf'){const data=await blobToDataURL(png),{jsPDF}=window.jspdf,p=new jsPDF({unit:'px',format:[size,size]});p.addImage(data,'PNG',0,0,size,size);return new File([p.output('blob')],'qr-code.pdf',{type:'application/pdf'})}
+              return new File([png],'qr-code.png',{type:'image/png'});
+            }
+            const saveFile=file=>{const u=URL.createObjectURL(file),a=document.createElement('a');a.href=u;a.download=file.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(u),1200)};
+            async function shareFresh(file,text='My QR Code'){if(navigator.share&&(!navigator.canShare||navigator.canShare({files:[file]}))){await navigator.share({title:'My QR Code',text,files:[file]});return true}return false}
+            window.addEventListener('DOMContentLoaded',()=>{
+              const stage=document.querySelector('.qrstage');if(stage&&!byId('qrLive')){const h=document.createElement('div');h.id='qrLive';const old=byId('qrImage');old?old.before(h):stage.appendChild(h)}
+              document.addEventListener('input',e=>{if(e.target.matches('input,textarea,select'))queueDirect()},true);
+              document.addEventListener('change',e=>{if(e.target.matches('input,textarea,select'))queueDirect()},true);
+              document.addEventListener('click',e=>{if(e.target.closest('.type,.shape,.preset,.icon-btn,.size-preset,#clearIcon,#resetDesign,#createDynamic,#disableDynamic'))setTimeout(queueDirect,0)},true);
+              const dl=byId('download');if(dl)dl.onclick=async()=>{dl.disabled=true;try{const f=await freshSelectedFile();saveFile(f);byId('status').textContent='Download started.'}catch(e){console.error(e);byId('status').textContent='Could not download. Please try again.'}finally{dl.disabled=false}};
+              const sh=byId('share');if(sh)sh.onclick=async()=>{try{const f=await freshSelectedFile();if(!await shareFresh(f))byId('status').textContent='File sharing is not supported in this browser.'}catch(e){if(e?.name!=='AbortError')console.error(e)}};
+              const em=byId('emailCode');if(em)em.onclick=async()=>{try{const f=await freshSelectedFile();if(await shareFresh(f,'QR code attached. Choose Mail to send it.'))byId('status').textContent='Choose Mail to send the attached '+f.name.split('.').pop().toUpperCase()+' file.';else location.href='mailto:?subject='+encodeURIComponent('My QR Code')+'&body='+encodeURIComponent('Please attach the downloaded QR code.')}catch(e){if(e?.name!=='AbortError')console.error(e)}};
+              const cp=byId('copyQr');if(cp)cp.onclick=async()=>{try{const png=await freshQRBlob('png',Math.min(2048,Number(byId('qrSize')?.value||1024)));if(navigator.clipboard&&window.ClipboardItem){await navigator.clipboard.write([new ClipboardItem({'image/png':png})]);byId('status').textContent='QR image copied to clipboard.'}}catch(e){console.error(e)}};
+              renderDirect();
+            });
+            window.renderDirectQR=renderDirect;
+          })();
+          </script>'''
+          s=s.replace('</body>',patch+'</body>')
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR Render Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Restore direct SVG live QR rendering and fresh exports' || exit 0
+          git push
