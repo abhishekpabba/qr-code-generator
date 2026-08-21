@@ -1,0 +1,108 @@
+name: Fix fresh QR rendering
+on:
+  push:
+    paths: ['.github/workflows/fix-fresh-qr-render.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch renderer
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html'); s=p.read_text()
+          marker="<script id='fresh-qr-renderer'>"
+          if marker in s:
+            raise SystemExit(0)
+          script=r'''<script id='fresh-qr-renderer'>
+(()=>{
+  // Always generate from a NEW QRCodeStyling instance so Safari cannot export stale data.
+  canvas = async function(){
+    const s=+$('qrSize').value;
+    const pad=shape==='round'?36:18;
+    const label=val('labelText');
+    const lh=label?64:0;
+    const w=s+pad*2, h=s+pad*2+lh;
+    const c=document.createElement('canvas'), x=c.getContext('2d');
+    c.width=w; c.height=h;
+
+    const transparent=$('transparentBg')?.checked;
+    const bgColor=$('bg').value;
+    const fgColor=$('fg').value;
+    const eccValue=$('ecc')?.value;
+    const ecc=(eccValue&&eccValue!=='auto')?eccValue:(logo?'H':'Q');
+    const margin=+$('quietZone')?.value||16;
+    const dotType=shape==='round'?'dots':$('dotStyle').value;
+    const dynamicActive=type==='url' && $('dynamicToggle')?.checked && window.__dynamicRedirect;
+    const currentData=dynamicActive ? location.origin+window.__dynamicRedirect : payload();
+
+    const host=document.createElement('div');
+    host.style.cssText='position:fixed;left:-10000px;top:-10000px;width:1px;height:1px;overflow:hidden';
+    document.body.appendChild(host);
+    const fresh=new QRCodeStyling({
+      width:s,height:s,type:'canvas',data:currentData,margin,
+      qrOptions:{errorCorrectionLevel:ecc},
+      dotsOptions:{type:dotType,color:fgColor},
+      cornersSquareOptions:{type:shape==='round'?'dot':undefined,color:fgColor},
+      cornersDotOptions:{type:shape==='round'?'dot':undefined,color:fgColor},
+      backgroundOptions:{color:'transparent'},
+      imageOptions:{margin:5,imageSize:+$('logoSize').value/100,crossOrigin:'anonymous'}
+    });
+    fresh.append(host);
+    await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+    const raw=await fresh.getRawData('png');
+    host.remove();
+    const img=await blobImg(raw);
+
+    if(!transparent){
+      x.fillStyle=bgColor;
+      if(shape==='round'){
+        x.beginPath();x.arc(w/2,w/2,w/2,0,Math.PI*2);x.fill();
+      }else if(shape==='rounded'){
+        x.beginPath();x.roundRect?x.roundRect(0,0,w,h,26):x.rect(0,0,w,h);x.fill();
+      }else x.fillRect(0,0,w,h);
+    }
+
+    if(shape==='round'){
+      x.save();x.beginPath();x.arc(w/2,w/2,w/2,0,Math.PI*2);x.clip();
+    }else if(shape==='rounded'){
+      x.save();x.beginPath();x.roundRect?x.roundRect(0,0,w,h,26):x.rect(0,0,w,h);x.clip();
+    }else x.save();
+
+    x.drawImage(img,pad,pad,s,s);
+    x.restore();
+
+    if(logo){
+      const li=await dataImg(logo), iw=Math.max(28,Math.round(s*(+$('logoSize').value/100)));
+      const cx=pad+s/2,cy=pad+s/2,bp=Math.max(6,Math.round(iw*.13)),bw=iw+bp*2,bx=cx-bw/2,by=cy-bw/2;
+      x.fillStyle='#fff';x.beginPath();
+      if(x.roundRect)x.roundRect(bx,by,bw,bw,Math.max(8,Math.round(bw*.18)));else x.rect(bx,by,bw,bw);
+      x.fill();x.drawImage(li,cx-iw/2,cy-iw/2,iw,iw);
+    }
+    if(label){x.fillStyle=fgColor;x.font='700 32px Arial';x.textAlign='center';x.textBaseline='middle';x.fillText(label,w/2,s+pad+34)}
+    c.dataset.qrPayload=currentData;
+    return c;
+  };
+
+  // Force a refresh from the current value on every editable field change.
+  document.addEventListener('input',e=>{
+    if(e.target.matches('#fields input,#fields textarea,#fields select,#url,#text')) schedule();
+  },true);
+  document.addEventListener('change',e=>{
+    if(e.target.matches('#fields input,#fields textarea,#fields select,#url,#text')) schedule();
+  },true);
+})();
+</script>'''
+          s=s.replace('</body>',script+'</body>')
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR Renderer Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Fix stale QR payload by regenerating fresh QR instances' || exit 0
+          git push
