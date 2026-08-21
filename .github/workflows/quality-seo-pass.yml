@@ -1,0 +1,66 @@
+name: QR quality and SEO pass
+on:
+  push:
+    paths:
+      - '.github/workflows/quality-seo-pass.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch production page
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html')
+          s=p.read_text()
+          # Canonical + QR decoder + schema hooks
+          s=s.replace('<meta name="robots" content="index,follow,max-image-preview:large">','<meta name="robots" content="index,follow,max-image-preview:large"><link rel="canonical" href="https://qr-code-generator-beta-eight.vercel.app/">')
+          if 'jsQR' not in s:
+              s=s.replace('<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>','<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script><script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>')
+          extra_css='''.quality-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}.quality-pill{font-size:12px;font-weight:700;border-radius:999px;padding:7px 10px;background:#eef8f2;color:#25724c}.quality-pill.warn{background:#fff3e6;color:#9a5a00}.format-help{font-size:11px;color:var(--muted);margin-top:7px}.seo-wrap{width:min(980px,calc(100% - 32px));margin:20px auto 70px}.seo-wrap h2{font-size:30px;margin:38px 0 12px}.steps,.faq-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.seo-card{background:#fff;border:1px solid var(--line);border-radius:18px;padding:18px}.seo-card h3{margin:0 0 8px;font-size:16px}.seo-card p{margin:0;color:var(--muted);font-size:14px;line-height:1.6}@media(max-width:700px){.steps,.faq-grid{grid-template-columns:1fr}.seo-wrap{width:min(100% - 16px,980px);margin-bottom:35px}.seo-wrap h2{font-size:24px;margin-top:26px}}'''
+          s=s.replace('</style>',extra_css+'</style>',1)
+          # Quality indicators and format explainer
+          s=s.replace('<div id="status" class="status"></div>','<div class="quality-row"><span id="scanCheck" class="quality-pill">Checking scan…</span><span id="contrastCheck" class="quality-pill">Contrast OK</span></div><div id="status" class="status"></div>')
+          s=s.replace('</select><button id="download" class="btn primary">Download</button></div></div>','</select><button id="download" class="btn primary">Download</button></div><div class="format-help">PNG/JPG are best for digital use. SVG/PDF are best for print and scaling.</div></div>',1)
+          # SEO content before closing main
+          seo='''<section class="seo-wrap"><h2>How to create a QR code</h2><div class="steps"><article class="seo-card"><h3>1. Choose what to share</h3><p>Select Website or Text, or open More QR types for WiFi, email, phone, SMS, WhatsApp and contact details.</p></article><article class="seo-card"><h3>2. Customize the design</h3><p>Adjust colors, QR pattern, shape, size, center icon or logo, and optional text.</p></article><article class="seo-card"><h3>3. Download or share</h3><p>Export PNG, JPG, SVG or PDF, or use Share and Email QR on supported devices.</p></article></div><h2>QR code FAQ</h2><div class="faq-grid"><article class="seo-card"><h3>Are these QR codes free?</h3><p>Yes. Static QR codes created here can be downloaded and used without creating an account.</p></article><article class="seo-card"><h3>Do static QR codes expire?</h3><p>No. A static QR code keeps working as long as the information encoded inside it remains valid.</p></article><article class="seo-card"><h3>Which file format should I use?</h3><p>Use PNG or JPG for websites and social media. Use SVG or PDF when you need sharp print output at larger sizes.</p></article><article class="seo-card"><h3>Can I add a logo or social icon?</h3><p>Yes. Upload your own image or choose a built-in center icon such as Instagram, Facebook, Website or TikTok.</p></article><article class="seo-card"><h3>Will a customized QR code still scan?</h3><p>The generator checks the finished QR image and warns when contrast or customization may reduce scan reliability.</p></article><article class="seo-card"><h3>What is a dynamic QR code?</h3><p>A dynamic QR code points to a redirect URL so its destination can be edited later and scans can be measured. Dynamic QR codes are planned as an advanced feature.</p></article></div></section>'''
+          s=s.replace('</main>',seo+'</main>',1)
+          # Schema markup
+          schema='''<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Free QR Code Generator","applicationCategory":"UtilitiesApplication","operatingSystem":"Web","url":"https://qr-code-generator-beta-eight.vercel.app/","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}}</script><script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Are these QR codes free?","acceptedAnswer":{"@type":"Answer","text":"Yes. Static QR codes created here can be downloaded and used without creating an account."}},{"@type":"Question","name":"Do static QR codes expire?","acceptedAnswer":{"@type":"Answer","text":"No. A static QR code keeps working as long as the information encoded inside it remains valid."}},{"@type":"Question","name":"Which QR code file format should I use?","acceptedAnswer":{"@type":"Answer","text":"Use PNG or JPG for digital use and SVG or PDF for print and scaling."}}]}</script>'''
+          s=s.replace('</head>',schema+'</head>',1)
+          # Accessibility labels
+          s=s.replace('<button id="emailCode" class="btn">','<button id="emailCode" class="btn" aria-label="Email QR code">')
+          s=s.replace('<button id="share" class="btn">','<button id="share" class="btn" aria-label="Share QR code">')
+          s=s.replace('<button id="print" class="btn">','<button id="print" class="btn" aria-label="Print QR code">')
+          # Add contrast + scan validation without touching existing renderer logic
+          hook='''
+          <script>
+          (function(){
+            const byId=id=>document.getElementById(id);
+            function rgb(hex){hex=hex.replace('#','');if(hex.length===3)hex=[...hex].map(x=>x+x).join('');return [0,2,4].map(i=>parseInt(hex.slice(i,i+2),16)/255)}
+            function lum(hex){return rgb(hex).map(v=>v<=.03928?v/12.92:Math.pow((v+.055)/1.055,2.4)).reduce((a,v,i)=>a+v*[.2126,.7152,.0722][i],0)}
+            function contrast(){const f=byId('fg'),b=byId('bg'),el=byId('contrastCheck');if(!f||!b||!el)return;const L1=lum(f.value),L2=lum(b.value),r=(Math.max(L1,L2)+.05)/(Math.min(L1,L2)+.05);el.textContent=r>=4?'Contrast OK':'Low contrast';el.classList.toggle('warn',r<4)}
+            async function scan(){const img=byId('qrImage'),el=byId('scanCheck');if(!img||!el||!img.naturalWidth||!window.jsQR)return;try{const c=document.createElement('canvas');c.width=img.naturalWidth;c.height=img.naturalHeight;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(img,0,0);const d=x.getImageData(0,0,c.width,c.height),r=jsQR(d.data,d.width,d.height,{inversionAttempts:'attemptBoth'});el.textContent=r?'Scan check passed':'Scan may fail';el.classList.toggle('warn',!r)}catch(e){el.textContent='Scan check unavailable';el.classList.add('warn')}}
+            window.addEventListener('load',()=>{const img=byId('qrImage');if(img)img.addEventListener('load',()=>{contrast();scan()});['fg','bg'].forEach(id=>{const e=byId(id);if(e)e.addEventListener('input',contrast)});contrast()});
+          })();
+          </script>'''
+          s=s.replace('</body>',hook+'</body>',1)
+          p.write_text(s)
+      - name: Validate HTML script syntax roughly
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          s=Path('public/index.html').read_text()
+          assert 'FAQPage' in s and 'scanCheck' in s and 'canonical' in s
+          PY
+      - name: Commit
+        run: |
+          git config user.name 'QR UI Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Add QR scan checks, contrast warnings and SEO content' || exit 0
+          git push
