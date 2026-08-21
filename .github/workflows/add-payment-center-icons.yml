@@ -1,0 +1,28 @@
+name: Add payment center icons
+on:
+  push:
+    paths: ['.github/workflows/add-payment-center-icons.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Add payment icons
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html'); s=p.read_text()
+          anchor="{name:'Link',symbol:'↗'}"
+          replacement="{name:'PayPal',symbol:'P'},{name:'Venmo',symbol:'V'},{name:'Cash App',symbol:'$'},{name:'UPI',symbol:'₹'},{name:'Bitcoin',symbol:'₿'},{name:'Google Pay',symbol:'G'},{name:'Apple Pay',symbol:'●'},{name:'Stripe',symbol:'S'},{name:'Link',symbol:'↗'}"
+          if anchor in s: s=s.replace(anchor,replacement,1)
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR UI Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Add payment apps to center icon library' || exit 0
+          git push
