@@ -1,0 +1,39 @@
+name: Restore known-good QR core
+on:
+  push:
+    paths: ['.github/workflows/restore-known-good-core.yml']
+permissions:
+  contents: write
+jobs:
+  restore:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore QR engine only from known-good commit
+        shell: python
+        run: |
+          from pathlib import Path
+          import subprocess
+          good=subprocess.check_output(['git','show','040fb6e326b7e48b06d6bc2c63c1fecd0b107b41:public/index.html'],text=True)
+          cur=Path('public/index.html').read_text()
+          marker='<script>const T='
+          gs=good.find(marker); ge=good.find('renderIcons();render();</script>',gs)
+          cs=cur.find(marker); ce=cur.find('renderIcons();render();</script>',cs)
+          if min(gs,ge,cs,ce)<0: raise SystemExit('Could not locate QR core script')
+          ge += len('renderIcons();render();</script>')
+          ce += len('renderIcons();render();</script>')
+          restored=good[gs:ge]
+          # Compatibility for newer dynamic QR code UI which calls update().
+          restored=restored.replace('function schedule(){clearTimeout(timer);timer=setTimeout(preview,100)}','function schedule(){clearTimeout(timer);timer=setTimeout(preview,100)}window.update=schedule;')
+          cur=cur[:cs]+restored+cur[ce:]
+          Path('public/index.html').write_text(cur)
+      - name: Commit restored engine
+        run: |
+          git config user.name 'QR Reliability Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Restore known-good live QR update engine from Aug 20' || exit 0
+          git push
