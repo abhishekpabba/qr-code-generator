@@ -1,0 +1,58 @@
+name: Minimalist mobile UI
+on:
+  push:
+    paths: ['.github/workflows/minimalist-mobile-ui.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Simplify mobile generator UI
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html'); s=p.read_text()
+          s=s.replace('<div>Free • No sign up</div>','<div class="nav-note">Free · No signup</div>')
+          s=s.replace('<span class="pill">✦ Free QR code maker</span>','')
+          s=s.replace('Create, customize, and download professional QR codes in seconds.','Create, customize and download in seconds.')
+          s=s.replace('Edit the destination later and see scan counts.','Edit the destination later and see scan counts.')
+          s=s.replace('＋ Upload image','＋ Upload center logo')
+          s=s.replace('+ Upload image','+ Upload center logo')
+          # Hide redundant marketing feature cards; keep SEO content in compact form.
+          css='''<style id="minimalist-ui">
+          .features{display:none!important}.nav-note{font-size:14px;color:#3f3f46}.hero .pill{display:none!important}
+          .minimal-toggle{width:100%;border:1px solid var(--line);background:#fff;border-radius:12px;padding:11px 14px;font-weight:800;color:#5b4bd3;display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:12px}.minimal-toggle::after{content:'+'}.minimal-toggle.open::after{content:'−'}
+          .minimal-collapsible{display:none}.minimal-collapsible.open{display:block}.recent-toggle{margin:0;width:100%;border:0;background:transparent;padding:0;display:flex;justify-content:space-between;align-items:center;font-size:15px;font-weight:800;text-align:left}.recent-toggle span{color:#6b57db;font-size:12px}.seo-card details{width:100%}
+          .faq-grid .seo-card{padding:0}.faq-grid .seo-card h3{padding:16px 18px;margin:0}.faq-grid .seo-card p{padding:0 18px 16px}.faq-grid .seo-card.collapsed p{display:none}.faq-grid .seo-card.collapsed h3{cursor:pointer}
+          @media(max-width:600px){
+            .nav{height:58px;padding-left:16px;padding-right:16px}.brand{font-size:17px;gap:8px}.mark{padding:7px;border-radius:10px}.nav-note{font-size:12px;white-space:nowrap}
+            .hero{padding:16px 0 6px}.hero h1{font-size:38px;line-height:.98;margin:4px auto 8px;max-width:330px}.hero p{font-size:15px;line-height:1.35;max-width:320px}
+            .workspace{margin-top:10px}.panel,.preview{padding:14px}.card{border-radius:20px}.sub{margin-bottom:12px}.section{margin-top:12px;padding-top:12px}.field{margin-bottom:10px}
+            .dynamic-card{margin:10px 0 12px;padding:10px}.dynamic-head{gap:8px}.dynamic-head .sub,.dynamic-head p{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:245px;margin:2px 0 0!important;font-size:11px}
+            .controls{gap:8px}.control{min-height:46px;padding:9px}.icon-title{margin:12px 0 8px}.icon-grid{gap:7px}.icon-btn{min-height:50px}.quickbar{margin:8px 0}.shapes{gap:7px}.rangeRow{gap:8px}.qrstage{min-height:280px;padding:10px}.formats{margin-top:10px}.utility{gap:7px}.utility .btn{padding:10px 8px}
+            .mobile-float{width:76px;height:76px;right:10px;bottom:12px;border-radius:16px}
+            .seo-wrap{margin-top:8px}.seo-wrap h2{font-size:23px;margin:22px 0 10px}.steps{gap:8px}.steps .seo-card{padding:13px 14px}.steps .seo-card h3{font-size:15px;margin-bottom:5px}.steps .seo-card p{font-size:12px;line-height:1.45}.faq-grid{gap:8px}.faq-grid .seo-card h3{font-size:15px;padding:14px}.faq-grid .seo-card p{font-size:12px;line-height:1.45;padding:0 14px 14px}.site-footer{margin-top:18px}
+          }
+          </style>'''
+          s=s.replace('</head>',css+'</head>')
+          js='''<script id="minimalist-ui-script">window.addEventListener('DOMContentLoaded',()=>{
+            const byText=(sel,t)=>[...document.querySelectorAll(sel)].find(x=>x.textContent.trim()===t);
+            const quickH=byText('h3','Quick styles');
+            if(quickH){const sec=quickH.closest('.section');if(sec){quickH.style.display='none';const preset=sec.querySelector('.preset-row');const quick=sec.querySelector('.quickbar');const wrap=document.createElement('div');wrap.className='minimal-collapsible';if(preset)wrap.appendChild(preset);if(quick)wrap.appendChild(quick);const b=document.createElement('button');b.type='button';b.className='minimal-toggle';b.textContent='Advanced design & styles';b.onclick=()=>{b.classList.toggle('open');wrap.classList.toggle('open')};sec.insertBefore(b,sec.firstChild);sec.appendChild(wrap)}}
+            const upload=document.getElementById('logoLabel');if(upload)upload.textContent='＋ Upload center logo';
+            document.querySelectorAll('.dynamic-card').forEach(card=>{const p=[...card.querySelectorAll('p,.sub,div')].find(x=>x.textContent.trim()==='Edit the destination later and see scan counts.');if(p)p.textContent='Edit the destination later and see scan counts.'});
+            const recentH=byText('h3','Recent QR codes');if(recentH){const sec=recentH.closest('.section');const list=document.getElementById('recentHistory');if(sec&&list){list.classList.add('minimal-collapsible');recentH.remove();const b=document.createElement('button');b.type='button';b.className='recent-toggle';const count=()=>{const n=list.querySelectorAll('.history-item').length;return `Recent QR codes${n?` (${n})`:''}`};b.innerHTML=`${count()} <span>Show</span>`;b.onclick=()=>{const open=list.classList.toggle('open');b.querySelector('span').textContent=open?'Hide':'Show';b.childNodes[0].nodeValue=count()+' '};sec.insertBefore(b,list)}}
+            document.querySelectorAll('.faq-grid .seo-card').forEach(card=>{card.classList.add('collapsed');const h=card.querySelector('h3');if(h)h.addEventListener('click',()=>card.classList.toggle('collapsed'))});
+          });</script>'''
+          s=s.replace('</body>',js+'</body>')
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR UI Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Simplify mobile QR generator layout' || exit 0
+          git push
