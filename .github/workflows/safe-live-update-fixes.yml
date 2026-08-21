@@ -1,0 +1,60 @@
+name: Safe QR live update fixes
+on:
+  push:
+    paths: ['.github/workflows/safe-live-update-fixes.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch stable homepage safely
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html')
+          s=p.read_text()
+
+          # 1) Make every QR type produce its own payload instead of falling through to vCard.
+          old="""function payload(){if(type==='url'){let u=val('url')||'https://example.com';if(!/^https?:\\/\\//i.test(u))u='https://'+u;return u}if(type==='text')return val('text')||'Hello!';if(type==='wifi')return`WIFI:T:WPA;S:${val('ssid')};P:${val('password')};;`;if(type==='email')return`mailto:${val('email')}?subject=${encodeURIComponent(val('subject'))}`;if(type==='phone')return'tel:'+val('phone').replace(/[^+\\d]/g,'');if(type==='sms')return`SMSTO:${val('smsPhone')}:${val('smsText')}`;if(type==='whatsapp')return`https://wa.me/${val('waPhone').replace(/\\D/g,'')}?text=${encodeURIComponent(val('waText'))}`;return`BEGIN:VCARD\\nVERSION:3.0\\nFN:${val('name')}\\nTEL:${val('vphone')}\\nEMAIL:${val('vemail')}\\nURL:${val('vweb')}\\nEND:VCARD`}"""
+          new="""function payload(){if(type==='url'){let u=val('url')||'https://example.com';if(!/^https?:\\/\\//i.test(u))u='https://'+u;return u}if(type==='text')return val('text')||'Hello!';if(type==='wifi')return`WIFI:T:WPA;S:${val('ssid')};P:${val('password')};;`;if(type==='email')return`mailto:${val('email')}?subject=${encodeURIComponent(val('subject'))}`;if(type==='phone')return'tel:'+val('phone').replace(/[^+\\d]/g,'');if(type==='sms')return`SMSTO:${val('smsPhone')}:${val('smsText')}`;if(type==='whatsapp')return`https://wa.me/${val('waPhone').replace(/\\D/g,'')}?text=${encodeURIComponent(val('waText'))}`;if(type==='vcard')return`BEGIN:VCARD\\nVERSION:3.0\\nFN:${val('name')}\\nTEL:${val('vphone')}\\nEMAIL:${val('vemail')}\\nURL:${val('vweb')}\\nEND:VCARD`;if(['instagram','tiktok','youtube','paypal','venmo','upi','bitcoin'].includes(type))return val('url')||'';return val('url')||val('text')||'Hello!' }"""
+          if old in s:s=s.replace(old,new,1)
+
+          # 2) Ensure dynamically rendered fields for all types bind directly to schedule().
+          old2="""f.querySelector('input').addEventListener('input',()=>document.querySelector('[data-type=\"url\"]')?.dispatchEvent(new Event('input')));"""
+          new2="""f.querySelectorAll('input,textarea,select').forEach(el=>{el.addEventListener('input',schedule);el.addEventListener('change',schedule)});schedule();"""
+          s=s.replace(old2,new2)
+
+          # 3) Color pickers: listen to both input + change (Safari reliably fires change).
+          old3="""['fg','bg','dotStyle','labelText','qrSize','logoSize'].forEach(id=>$(id).addEventListener('input',schedule));"""
+          new3="""['fg','bg','dotStyle','labelText','qrSize','logoSize'].forEach(id=>{const el=$(id);el.addEventListener('input',schedule);el.addEventListener('change',schedule)});"""
+          s=s.replace(old3,new3,1)
+
+          # 4) Replace alarming scan copy with an actual pass/check state, while preserving contrast calculation.
+          s=s.replace("el.textContent=r?'Scan check passed':'Scan may fail';el.classList.toggle('warn',!r)","el.textContent=r?'Scan check passed':'Test scan';el.classList.toggle('warn',!r)")
+
+          # 5) Advanced selection summary: event-driven only, no MutationObserver.
+          hook="""<style>.advanced-selected{margin:7px 2px 0;color:#6755e7;font-size:11px;font-weight:750;line-height:1.45}.advanced-selected:empty{display:none}.preset.active,.shape.active,.size-preset.active{border-color:#9585e8!important;background:#f5f2ff!important;color:#5942d1!important}</style><script id='safe-advanced-summary'>
+          window.addEventListener('DOMContentLoaded',()=>{
+            const g=id=>document.getElementById(id), btn=g('toggleAdvanced');
+            if(!btn)return;
+            const summary=document.createElement('div');summary.className='advanced-selected';btn.insertAdjacentElement('afterend',summary);
+            const refresh=()=>{const p=[];const sh=document.querySelector('.shape.active');if(sh&&sh.dataset.shape!=='square')p.push(sh.textContent.trim());const dot=g('dotStyle');if(dot&&dot.value!=='square')p.push(dot.selectedOptions[0].textContent.trim());const gm=g('gradientMode');if(gm&&gm.value!=='none')p.push(gm.selectedOptions[0].textContent.trim());const cta=g('ctaFrame');if(cta&&cta.value!=='none')p.push(cta.selectedOptions[0].textContent.trim());const ecc=g('ecc');if(ecc&&ecc.value!=='auto')p.push('Scan resilience: '+ecc.selectedOptions[0].textContent.trim());const qz=g('quietZone');if(qz&&qz.value!=='16')p.push('Margin: '+qz.selectedOptions[0].textContent.trim());const size=g('qrSize');if(size&&size.value!=='512')p.push(size.value+'px');const preset=document.querySelector('.preset.active');if(preset)p.unshift(preset.textContent.trim());summary.textContent=p.length?'Selected: '+p.join(' · '):''};
+            ['dotStyle','gradientMode','ctaFrame','ecc','quietZone','qrSize'].forEach(id=>g(id)?.addEventListener('change',refresh));
+            document.querySelectorAll('.shape').forEach(x=>x.addEventListener('click',()=>setTimeout(refresh,0)));
+            document.querySelectorAll('.preset').forEach(x=>x.addEventListener('click',()=>{document.querySelectorAll('.preset').forEach(y=>y.classList.toggle('active',y===x));setTimeout(refresh,0)}));
+            document.querySelectorAll('.size-preset').forEach(x=>x.addEventListener('click',()=>setTimeout(refresh,0)));
+            refresh();
+          });
+          </script>"""
+          s=s.replace('</body>',hook+'</body>',1)
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR Safe Fix Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Safely restore live updates for all QR controls' || exit 0
+          git push
