@@ -1,0 +1,17 @@
+{
+  "name": "Free QR Code Generator",
+  "short_name": "QR Generator",
+  "description": "Create free custom QR codes with logos, colors and multiple export formats.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#6755e7",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
