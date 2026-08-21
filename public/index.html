@@ -59,7 +59,7 @@ window.addEventListener('DOMContentLoaded',()=>{
   if(more?.contains(btn) && !more.classList.contains('open')) document.getElementById('toggleTypes')?.click();
   setTimeout(()=>{btn.click();document.querySelector('.workspace')?.scrollIntoView({behavior:'smooth',block:'start'});},80);
 });
-</script><footer class="site-footer"><div class="shell"><strong>Free QR Code Generator</strong><p>Static QR codes are generated in your browser. No account is required.</p><nav><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/wifi-qr-code-generator/">WiFi QR</a><a href="/vcard-qr-code-generator/">vCard QR</a><a href="/svg-qr-code-generator/">SVG QR</a></nav></div></footer><script>
+</script><footer class="site-footer"><div class="shell"><p>© 2026 QR Code Generator · <a href="/privacy/">Privacy</a> · <a href="/terms/">Terms</a></p></div></footer><script>
   (()=>{window.qrPolishReady=true;const $=id=>document.getElementById(id);
     document.querySelectorAll('.size-preset').forEach(b=>b.addEventListener('click',()=>{const v=b.dataset.size;$('qrSize').value=v;$('qrSize').dispatchEvent(new Event('input',{bubbles:true}));document.querySelectorAll('.size-preset').forEach(x=>x.classList.toggle('active',x===b));}));
     const cta=$('ctaFrame'),wrap=$('customCtaWrap'),custom=$('customCta');
