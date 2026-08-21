@@ -1,0 +1,112 @@
+name: Restore stable QR engine while preserving latest UI
+on:
+  push:
+    paths: ['.github/workflows/restore-stable-engine-preserve-ui.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore known-good direct QR update engine
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html')
+          s=p.read_text()
+          marker='stable-engine-31b664f'
+          if marker in s:
+            raise SystemExit(0)
+          patch=r'''<style id="stable-engine-31b664f-style">
+          #qrStable{display:flex;align-items:center;justify-content:center;width:100%}
+          #qrStable svg{display:block;max-width:100%;height:auto}
+          #qrLive,#qrImage{display:none!important}
+          </style>
+          <script id="stable-engine-31b664f">
+          (()=>{
+            const g=id=>document.getElementById(id);
+            const v=id=>(g(id)?.value||'').trim();
+            const escWifi=x=>String(x||'').replace(/([\\;,:\"])/g,'\\$1');
+            const phone=x=>String(x||'').replace(/[^+\d]/g,'');
+            const ensureUrl=x=>{x=(x||'').trim();if(!x)return 'https://example.com';return /^https?:\/\//i.test(x)?x:'https://'+x};
+            function stablePayload(){
+              if(window.__dynamicRedirect)return location.origin+window.__dynamicRedirect;
+              switch(type){
+                case 'url': return ensureUrl(v('url'));
+                case 'text': return v('text')||'Hello!';
+                case 'wifi': {
+                  const sec=v('wifiSecurity')||'WPA';
+                  return `WIFI:T:${sec};S:${escWifi(v('ssid'))};P:${escWifi(v('password'))};H:${g('wifiHidden')?.checked?'true':'false'};;`;
+                }
+                case 'email': {
+                  const q=[]; if(v('subject'))q.push('subject='+encodeURIComponent(v('subject'))); if(v('emailBody'))q.push('body='+encodeURIComponent(v('emailBody')));
+                  return `mailto:${v('email')}${q.length?'?'+q.join('&'):''}`;
+                }
+                case 'phone': return 'tel:'+phone(v('phone'));
+                case 'sms': return `SMSTO:${phone(v('smsPhone'))}:${v('smsText')}`;
+                case 'whatsapp': return `https://wa.me/${phone(v('waPhone')).replace('+','')}?text=${encodeURIComponent(v('waText'))}`;
+                case 'vcard': return ['BEGIN:VCARD','VERSION:3.0',`FN:${v('name')}`,v('company')?`ORG:${v('company')}`:'',v('vphone')?`TEL:${phone(v('vphone'))}`:'',v('vemail')?`EMAIL:${v('vemail')}`:'',v('vweb')?`URL:${ensureUrl(v('vweb'))}`:'',v('address')?`ADR:;;${v('address')};;;;`:'','END:VCARD'].filter(Boolean).join('\n');
+                case 'instagram': return ensureUrl((v('socialValue')||'instagram.com/username').replace(/^@/,'instagram.com/'));
+                case 'tiktok': return ensureUrl((v('socialValue')||'tiktok.com/@username').replace(/^@/,'tiktok.com/@'));
+                case 'youtube': return ensureUrl(v('socialValue')||'youtube.com/@channel');
+                case 'paypal': {const x=v('paymentValue');return /^https?:\/\//i.test(x)?x:`https://paypal.me/${x||'username'}`}
+                case 'venmo': {const x=v('paymentValue');return /^https?:\/\//i.test(x)?x:`https://venmo.com/u/${x||'username'}`}
+                case 'cashapp': return `https://cash.app/$${(v('paymentValue')||'cashtag').replace(/^\$/,'')}`;
+                case 'upi': return v('paymentValue')||'upi://pay?pa=name@bank&pn=Name';
+                case 'bitcoin': {const x=v('paymentValue');return /^bitcoin:/i.test(x)?x:`bitcoin:${x||'YOUR_ADDRESS'}`}
+                default: return v('url')||v('text')||'Hello!';
+              }
+            }
+            let host,stableQr,stableTimer=0;
+            function ensureHost(){
+              const stage=document.querySelector('.qrstage'); if(!stage)return null;
+              host=g('qrStable');
+              if(!host){host=document.createElement('div');host.id='qrStable';stage.prepend(host)}
+              return host;
+            }
+            function dotOptions(){
+              const fg=g('fg')?.value||'#111111',mode=g('gradientMode')?.value||'none';
+              const o={type:g('dotStyle')?.value||'square',color:fg};
+              if(mode!=='none'){delete o.color;o.gradient={type:mode,rotation:0,colorStops:[{offset:0,color:fg},{offset:1,color:g('grad2')?.value||'#6755e7'}]}}
+              return o;
+            }
+            function updateStable(){
+              if(!ensureHost()||!window.QRCodeStyling)return;
+              const size=Math.max(180,Number(g('qrSize')?.value||512));
+              const opts={width:size,height:size,type:'svg',data:stablePayload(),margin:Number(g('quietZone')?.value||16),qrOptions:{errorCorrectionLevel:(g('ecc')?.value&&g('ecc').value!=='auto')?g('ecc').value:(logo?'H':'Q')},dotsOptions:dotOptions(),backgroundOptions:{color:g('transparentBg')?.checked?'transparent':(g('bg')?.value||'#ffffff')},image:logo||undefined,imageOptions:{hideBackgroundDots:true,margin:5,imageSize:Number(g('logoSize')?.value||24)/100,crossOrigin:'anonymous'}};
+              const corner=window.qrCornerStyle||'auto';
+              if(corner!=='auto'){
+                const ct=corner==='rounded'?'extra-rounded':corner==='round'?'dot':corner;
+                opts.cornersSquareOptions={type:ct,color:g('fg')?.value||'#111111'};
+                opts.cornersDotOptions={type:ct==='square'?'square':'dot',color:g('fg')?.value||'#111111'};
+              }
+              if(!stableQr){stableQr=new QRCodeStyling(opts);stableQr.append(host)}else stableQr.update(opts);
+              host.style.borderRadius=shape==='round'?'50%':shape==='rounded'?'24px':'0';
+              host.style.overflow='hidden';
+              const svg=host.querySelector('svg');if(svg){svg.style.maxWidth='100%';svg.style.height='auto'}
+              if(g('qrSizeVal'))g('qrSizeVal').textContent=size+' px';
+              if(g('logoSizeVal'))g('logoSizeVal').textContent=(g('logoSize')?.value||24)+'%';
+            }
+            function scheduleStable(){clearTimeout(stableTimer);stableTimer=setTimeout(updateStable,40)}
+            window.update=updateStable;
+            window.schedule=scheduleStable;
+            document.addEventListener('input',e=>{if(e.target.matches('input,textarea,select'))scheduleStable()},true);
+            document.addEventListener('change',e=>{if(e.target.matches('input,textarea,select'))scheduleStable()},true);
+            document.addEventListener('click',e=>{if(e.target.closest('.type,.shape,.preset,.icon-btn,.size-preset,#clearIcon,#resetDesign,#createDynamic,#disableDynamic'))setTimeout(updateStable,0)},true);
+            const oldRender=window.render;
+            if(typeof oldRender==='function')window.render=function(){oldRender();setTimeout(updateStable,0)};
+            window.addEventListener('DOMContentLoaded',()=>setTimeout(updateStable,30));
+            window.stableQrPayload=stablePayload;
+          })();
+          </script>'''
+          s=s.replace('</body>',patch+'</body>')
+          p.write_text(s)
+      - name: Commit
+        run: |
+          git config user.name 'QR Product Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Restore stable QR update engine while preserving latest UI' || exit 0
+          git push
