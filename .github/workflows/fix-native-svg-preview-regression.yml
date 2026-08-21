@@ -1,0 +1,110 @@
+name: Fix native SVG QR preview regression
+on:
+  push:
+    paths: ['.github/workflows/fix-native-svg-preview-regression.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore one authoritative direct SVG live preview
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('public/index.html')
+          s=p.read_text()
+          marker='''<style id="native-svg-authoritative-style">
+#qrImage,#qrLive,#qrStable{display:none!important}
+#qrNative{width:100%;display:flex;align-items:center;justify-content:center;overflow:visible}
+#qrNative svg{display:block;width:min(100%,360px)!important;height:auto!important;max-width:360px!important;overflow:visible}
+.qrstage{overflow:visible!important}
+</style>
+<script id="native-svg-authoritative-renderer">
+(()=>{
+  const $n=id=>document.getElementById(id);
+  let nativeQR=null,nativeTimer=0;
+  function currentData(){
+    try{
+      if(window.__dynamicRedirect)return location.origin+window.__dynamicRedirect;
+      if(typeof window.stableQrPayload==='function')return window.stableQrPayload();
+      if(typeof payload==='function')return payload();
+    }catch(e){console.error('QR payload error',e)}
+    return 'https://example.com';
+  }
+  function displaySize(){
+    const stage=document.querySelector('.qrstage');
+    const available=Math.max(220,Math.min(360,(stage?.clientWidth||400)-28));
+    return Math.round(available);
+  }
+  function dots(){
+    const fg=$n('fg')?.value||'#111111';
+    const mode=$n('gradientMode')?.value||'none';
+    const out={type:$n('dotStyle')?.value||'square',color:fg};
+    if(mode!=='none'){
+      delete out.color;
+      out.gradient={type:mode,rotation:0,colorStops:[{offset:0,color:fg},{offset:1,color:$n('grad2')?.value||'#6755e7'}]};
+    }
+    return out;
+  }
+  function options(){
+    const size=displaySize();
+    const fg=$n('fg')?.value||'#111111';
+    const transparent=!!$n('transparentBg')?.checked;
+    const e=$n('ecc')?.value;
+    const o={
+      width:size,height:size,type:'svg',data:currentData(),
+      margin:Math.max(10,Math.min(24,Number($n('quietZone')?.value||16))),
+      qrOptions:{errorCorrectionLevel:e&&e!=='auto'?e:((typeof logo!=='undefined'&&logo)?'H':'Q')},
+      dotsOptions:dots(),
+      backgroundOptions:{color:transparent?'transparent':($n('bg')?.value||'#ffffff')},
+      image:(typeof logo!=='undefined'&&logo)||undefined,
+      imageOptions:{hideBackgroundDots:true,margin:5,imageSize:Number($n('logoSize')?.value||24)/100,crossOrigin:'anonymous'}
+    };
+    const c=window.qrCornerStyle||'auto';
+    if(c!=='auto'){
+      const ct=c==='rounded'?'extra-rounded':c==='round'?'dot':c;
+      o.cornersSquareOptions={type:ct,color:fg};
+      o.cornersDotOptions={type:ct==='square'?'square':'dot',color:fg};
+    }
+    return o;
+  }
+  function host(){
+    const stage=document.querySelector('.qrstage');if(!stage)return null;
+    let h=$n('qrNative');
+    if(!h){h=document.createElement('div');h.id='qrNative';stage.prepend(h)}
+    return h;
+  }
+  function renderNative(){
+    const h=host();if(!h||!window.QRCodeStyling)return;
+    const o=options();
+    try{
+      if(!nativeQR){nativeQR=new QRCodeStyling(o);nativeQR.append(h)}else nativeQR.update(o);
+      const selected=document.querySelector('.shape.active')?.dataset.shape||((typeof shape!=='undefined'&&shape)||'square');
+      h.style.borderRadius=selected==='round'?'50%':selected==='rounded'?'24px':'0';
+      h.style.clipPath=selected==='round'?'circle(50% at 50% 50%)':'none';
+      const svg=h.querySelector('svg');
+      if(svg){svg.style.width='100%';svg.style.maxWidth='360px';svg.style.height='auto';svg.setAttribute('aria-label','Generated QR code for '+currentData().slice(0,100))}
+    }catch(err){console.error('Native SVG QR render failed',err)}
+  }
+  function queue(){clearTimeout(nativeTimer);nativeTimer=setTimeout(renderNative,35)}
+  window.renderNativeQR=renderNative;
+  document.addEventListener('input',e=>{if(e.target.matches('input,textarea,select'))queue()},true);
+  document.addEventListener('change',e=>{if(e.target.matches('input,textarea,select'))queue()},true);
+  document.addEventListener('click',e=>{if(e.target.closest('.type,.shape,.preset,.icon-btn,.size-preset,#clearIcon,#resetDesign,#createDynamic,#disableDynamic'))setTimeout(renderNative,0)},true);
+  window.addEventListener('resize',queue);
+  window.addEventListener('DOMContentLoaded',()=>setTimeout(renderNative,50));
+})();
+</script>'''
+          if 'id="native-svg-authoritative-renderer"' not in s:
+              s=s.replace('</body>',marker+'</body>')
+          p.write_text(s)
+      - name: Commit fix
+        run: |
+          git config user.name 'QR Reliability Bot'
+          git config user.email 'actions@users.noreply.github.com'
+          git add public/index.html
+          git commit -m 'Restore native SVG live preview for reliable scanning' || exit 0
+          git push
